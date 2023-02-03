@@ -98,8 +98,17 @@ contract NonERC721Recipient {}
 contract ERC721Test is Test {
     MockERC721 token;
 
+    address happyRecipient;
+    address nonRecipient;
+    address revertingRecipient;
+    address wrongReturnDataRecipient;
+
     function setUp() public {
         token = new MockERC721("Token", "TKN");
+        happyRecipient = address(new ERC721Recipient());
+        nonRecipient = address(new NonERC721Recipient());
+        revertingRecipient = address(new RevertingERC721Recipient());
+        wrongReturnDataRecipient = address(new WrongReturnDataERC721Recipient());
     }
 
     function incr(address addr) internal pure returns (address) {
@@ -237,7 +246,7 @@ contract ERC721Test is Test {
 
     function testSafeTransferFromToERC721Recipient() public {
         address from = address(0xABCD);
-        ERC721Recipient recipient = new ERC721Recipient();
+        ERC721Recipient recipient = ERC721Recipient(happyRecipient);
 
         token.mint(from, incr(from));
 
@@ -259,7 +268,7 @@ contract ERC721Test is Test {
 
     function testSafeTransferFromToERC721RecipientWithData() public {
         address from = address(0xABCD);
-        ERC721Recipient recipient = new ERC721Recipient();
+        ERC721Recipient recipient = ERC721Recipient(happyRecipient);
 
         token.mint(from, incr(from));
 
@@ -287,7 +296,7 @@ contract ERC721Test is Test {
     }
 
     function testSafeMintToERC721Recipient() public {
-        ERC721Recipient to = new ERC721Recipient();
+        ERC721Recipient to = ERC721Recipient(happyRecipient);
 
         token.safeMint(address(to), incr(address(to)));
 
@@ -301,7 +310,7 @@ contract ERC721Test is Test {
     }
 
     function testSafeMintToERC721RecipientWithData() public {
-        ERC721Recipient to = new ERC721Recipient();
+        ERC721Recipient to = ERC721Recipient(happyRecipient);
 
         token.safeMint(address(to), incr(address(to)), "testing 123");
 
@@ -370,7 +379,7 @@ contract ERC721Test is Test {
 
         token.safeTransferFrom(
             address(this),
-            address(new NonERC721Recipient()),
+            nonRecipient,
             1
         );
     }
@@ -380,7 +389,7 @@ contract ERC721Test is Test {
 
         token.safeTransferFrom(
             address(this),
-            address(new NonERC721Recipient()),
+            nonRecipient,
             1,
             "testing 123"
         );
@@ -391,7 +400,7 @@ contract ERC721Test is Test {
 
         token.safeTransferFrom(
             address(this),
-            address(new RevertingERC721Recipient()),
+            revertingRecipient,
             1
         );
     }
@@ -403,7 +412,7 @@ contract ERC721Test is Test {
 
         token.safeTransferFrom(
             address(this),
-            address(new RevertingERC721Recipient()),
+            revertingRecipient,
             1,
             "testing 123"
         );
@@ -416,7 +425,7 @@ contract ERC721Test is Test {
 
         token.safeTransferFrom(
             address(this),
-            address(new WrongReturnDataERC721Recipient()),
+            wrongReturnDataRecipient,
             1
         );
     }
@@ -428,45 +437,45 @@ contract ERC721Test is Test {
 
         token.safeTransferFrom(
             address(this),
-            address(new WrongReturnDataERC721Recipient()),
+            wrongReturnDataRecipient,
             1,
             "testing 123"
         );
     }
 
     function testFailSafeMintToNonERC721Recipient() public {
-        address to = address(new NonERC721Recipient());
+        address to = nonRecipient;
         token.safeMint(to, incr(to));
     }
 
     function testFailSafeMintToNonERC721RecipientWithData() public {
-        address to = address(new NonERC721Recipient());
+        address to = nonRecipient;
         token.safeMint(
-            address(new NonERC721Recipient()),
+            nonRecipient,
             incr(to),
             "testing 123"
         );
     }
 
     function testFailSafeMintToRevertingERC721Recipient() public {
-        address to = address(new RevertingERC721Recipient());
+        address to = revertingRecipient;
         token.safeMint(to, incr(to));
     }
 
     function testFailSafeMintToRevertingERC721RecipientWithData() public {
-        address to = address(new RevertingERC721Recipient());
+        address to = revertingRecipient;
         token.safeMint(to, incr(to), "testing 123");
     }
 
     function testFailSafeMintToERC721RecipientWithWrongReturnData() public {
-        address to = address(new WrongReturnDataERC721Recipient());
+        address to = wrongReturnDataRecipient;
         token.safeMint(to, incr(to));
     }
 
     function testFailSafeMintToERC721RecipientWithWrongReturnDataWithData()
         public
     {
-        address to = address(new WrongReturnDataERC721Recipient());
+        address to = wrongReturnDataRecipient;
         token.safeMint(to, incr(to), "testing 123");
     }
 
@@ -613,7 +622,7 @@ contract ERC721Test is Test {
     function testSafeTransferFromToERC721Recipient(address from) public {
         vm.assume(from > address(18));
 
-        ERC721Recipient recipient = new ERC721Recipient();
+        ERC721Recipient recipient = ERC721Recipient(happyRecipient);
 
         token.mint(from, incr(from));
 
@@ -639,7 +648,7 @@ contract ERC721Test is Test {
     ) public {
         vm.assume(from > address(18));
 
-        ERC721Recipient recipient = new ERC721Recipient();
+        ERC721Recipient recipient = ERC721Recipient(happyRecipient);
 
         token.mint(from, incr(from));
 
@@ -672,7 +681,7 @@ contract ERC721Test is Test {
     }
 
     function testSafeMintToERC721RecipientWithData(bytes calldata data) public {
-        ERC721Recipient to = new ERC721Recipient();
+        ERC721Recipient to = ERC721Recipient(happyRecipient);
 
         token.safeMint(address(to), incr(address(to)), data);
 
@@ -753,7 +762,7 @@ contract ERC721Test is Test {
 
         token.safeTransferFrom(
             address(this),
-            address(new NonERC721Recipient()),
+            nonRecipient,
             1,
             data
         );
@@ -766,7 +775,7 @@ contract ERC721Test is Test {
 
         token.safeTransferFrom(
             address(this),
-            address(new RevertingERC721Recipient()),
+            revertingRecipient,
             1,
             data
         );
@@ -779,7 +788,7 @@ contract ERC721Test is Test {
 
         token.safeTransferFrom(
             address(this),
-            address(new WrongReturnDataERC721Recipient()),
+            wrongReturnDataRecipient,
             1,
             data
         );
@@ -788,21 +797,21 @@ contract ERC721Test is Test {
     function testFailSafeMintToNonERC721RecipientWithData(bytes calldata data)
         public
     {
-        address to = address(new NonERC721Recipient());
+        address to = nonRecipient;
         token.safeMint(to, incr(to), data);
     }
 
     function testFailSafeMintToRevertingERC721RecipientWithData(
         bytes calldata data
     ) public {
-        address to = address(new RevertingERC721Recipient());
+        address to = revertingRecipient;
         token.safeMint(to, incr(to), data);
     }
 
     function testFailSafeMintToERC721RecipientWithWrongReturnDataWithData(
         bytes calldata data
     ) public {
-        address to = address(new WrongReturnDataERC721Recipient());
+        address to = wrongReturnDataRecipient;
         token.safeMint(to, incr(to), data);
     }
 
