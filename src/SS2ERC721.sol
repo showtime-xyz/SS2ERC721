@@ -8,6 +8,14 @@ import {ERC721TokenReceiver} from "./ERC721TokenReceiver.sol";
 
 /// @notice SSTORE2-backed version of Solmate's ERC721, optimized for minting in a single batch
 abstract contract SS2ERC721 is ERC721 {
+    // The mask of the lower 160 bits for addresses.
+    uint256 private constant _BITMASK_ADDRESS = (1 << 160) - 1;
+
+    // The `Transfer` event signature is given by:
+    // `keccak256(bytes("Transfer(address,address,uint256)"))`.
+    bytes32 private constant _TRANSFER_EVENT_SIGNATURE =
+        0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef;
+
     /*//////////////////////////////////////////////////////////////
                       ERC721 BALANCE/OWNER STORAGE
     //////////////////////////////////////////////////////////////*/
@@ -240,9 +248,10 @@ abstract contract SS2ERC721 is ERC721 {
         require(_ownersPrimaryPointer == address(0), "ALREADY_MINTED");
 
         bytes memory addresses = SSTORE2.read(pointer);
-        require(addresses.length % 20 == 0, "INVALID_ADDRESSES");
+        uint256 length = addresses.length;
+        require(length % 20 == 0, "INVALID_ADDRESSES");
 
-        numMinted = addresses.length / 20;
+        numMinted = length / 20;
 
         address prev = address(0);
         for (uint256 i = 0; i < numMinted; ) {
@@ -250,18 +259,27 @@ abstract contract SS2ERC721 is ERC721 {
 
             assembly {
                 to := shr(96, mload(add(addresses, add(32, mul(i, 20)))))
+                i := add(i, 1)
             }
 
             // enforce that the addresses are sorted with no duplicates
             require(to > prev, "ADDRESSES_NOT_SORTED");
             prev = to;
 
-            unchecked {
-                ++i;
+            // borrowed from ERC721A.sol
+            // Mask `to` to the lower 160 bits, in case the upper bits somehow aren't clean.
+            uint256 toMasked = uint256(uint160(to)) & _BITMASK_ADDRESS;
+            assembly {
+                // Emit the `Transfer` event.
+                log4(
+                    0, // Start of data (0, since no data).
+                    0, // End of data (0, since no data).
+                    _TRANSFER_EVENT_SIGNATURE, // Signature.
+                    0, // `from`.
+                    toMasked, // `to`.
+                    i // `tokenId`.
+                )
             }
-
-            // start with token id 1
-            emit Transfer(address(0), to, i);
 
             if (safeMint) {
                 require(
