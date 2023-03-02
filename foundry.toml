@@ -4,3 +4,9 @@ out = 'out'
 libs = ['lib']
 
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config
+
+[profile.heavy_fuzz.fuzz]
+runs = 10000
+
+[profile.superheavy_fuzz.fuzz]
+runs = 100000
