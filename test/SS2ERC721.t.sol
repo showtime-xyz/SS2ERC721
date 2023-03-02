@@ -66,6 +66,11 @@ contract MockERC721 is SS2ERC721 {
         returns (string memory)
     {}
 
+    function safeMint(address addr) public {
+        address pointer = SSTORE2.write(abi.encodePacked(addr));
+        _safeMint(pointer);
+    }
+
     function safeMint(address addr1, address addr2) public {
         address pointer = SSTORE2.write(abi.encodePacked(addr1, addr2));
         _safeMint(pointer);
@@ -78,6 +83,11 @@ contract MockERC721 is SS2ERC721 {
     ) public {
         address pointer = SSTORE2.write(abi.encodePacked(addr1, addr2));
         _safeMint(pointer, data);
+    }
+
+    function mint(address to) public {
+        address pointer = SSTORE2.write(abi.encodePacked(to));
+        _mint(pointer);
     }
 
     function mint(address addr1, address addr2) public {
@@ -109,6 +119,16 @@ contract ERC721Test is Test {
         nonRecipient = address(new NonERC721Recipient());
         revertingRecipient = address(new RevertingERC721Recipient());
         wrongReturnDataRecipient = address(new WrongReturnDataERC721Recipient());
+    }
+
+    function bound_min(address a, uint256 min) internal view returns (address) {
+        return address(uint160(bound(uint160(a), min, type(uint160).max)));
+    }
+
+    /// @dev a value strictly greater than min_addr
+    function bound_min(address a, address min_addr) internal view returns (address) {
+        uint256 min = uint160(min_addr) + 1;
+        return bound_min(a, min);
     }
 
     function incr(address addr) internal pure returns (address) {
@@ -159,7 +179,7 @@ contract ERC721Test is Test {
     }
 
     function testApprove() public {
-        token.mint(address(this), incr(address(this)));
+        token.mint(address(this));
 
         token.approve(address(0xBEEF), 1);
 
@@ -496,7 +516,7 @@ contract ERC721Test is Test {
 
     function testMint(address to1, address to2) public {
         vm.assume(to1 != address(0));
-        vm.assume(to1 < to2);
+        to2 = bound_min(to2, to1);
 
         token.mint(to1, to2);
         assertEq(token.ownerOf(1), to1);
@@ -505,24 +525,21 @@ contract ERC721Test is Test {
         assertEq(token.balanceOf(to2), 1);
     }
 
-    function testBurn(address to1, address to2) public {
-        vm.assume(to1 != address(0));
-        vm.assume(to1 < to2);
+    function testBurn(address to) public {
+        vm.assume(to != address(0));
 
-        token.mint(to1, to2);
+        token.mint(to);
 
-        vm.prank(to1);
+        vm.prank(to);
         token.burn(1);
 
-        assertEq(token.balanceOf(to1), 0);
+        assertEq(token.balanceOf(to), 0);
 
         assertEq(token.ownerOf(1), address(0xdead));
     }
 
     function testApprove(address to) public {
-        vm.assume(address(this) < to);
-
-        token.mint(address(this), to);
+        token.mint(address(this));
 
         token.approve(to, 1);
 
@@ -530,12 +547,10 @@ contract ERC721Test is Test {
     }
 
     function testApproveBurn(address to) public {
-        vm.assume(address(this) < to);
+        vm.assume(to != address(0));
 
-        token.mint(address(this), to);
-
+        token.mint(address(this));
         token.approve(address(to), 1);
-
         token.burn(1);
 
         assertEq(token.balanceOf(address(this)), 0);
@@ -602,11 +617,12 @@ contract ERC721Test is Test {
     }
 
     function testSafeTransferFromToEOA(address from, address to) public {
-        vm.assume(from > address(18));
-        vm.assume(from < to);
+        from = bound_min(from, 20);
         vm.assume(to.code.length == 0);
+        vm.assume(to != address(0));
+        vm.assume(to != from);
 
-        token.mint(from, incr(from));
+        token.mint(from);
 
         vm.prank(from);
         token.setApprovalForAll(address(this), true);
@@ -620,11 +636,11 @@ contract ERC721Test is Test {
     }
 
     function testSafeTransferFromToERC721Recipient(address from) public {
-        vm.assume(from > address(18));
+        from = bound_min(from, 20);
 
         ERC721Recipient recipient = ERC721Recipient(happyRecipient);
 
-        token.mint(from, incr(from));
+        token.mint(from);
 
         vm.prank(from);
         token.setApprovalForAll(address(this), true);
@@ -646,11 +662,11 @@ contract ERC721Test is Test {
         address from,
         bytes calldata data
     ) public {
-        vm.assume(from > address(18));
+        from = bound_min(from, 20);
 
         ERC721Recipient recipient = ERC721Recipient(happyRecipient);
 
-        token.mint(from, incr(from));
+        token.mint(from);
 
         vm.prank(from);
         token.setApprovalForAll(address(this), true);
@@ -668,16 +684,14 @@ contract ERC721Test is Test {
         assertEq(recipient.data(), data);
     }
 
-    function testSafeMintToEOA(address to1, address to2) public {
-        vm.assume(to1 > address(18));
-        vm.assume(to1 < to2);
-        vm.assume(to1.code.length == 0);
-        vm.assume(to2.code.length == 0);
+    function testSafeMintToEOA(address to) public {
+        to = bound_min(to, 20);
+        vm.assume(to.code.length == 0);
 
-        token.safeMint(to1, to2);
+        token.safeMint(to);
 
-        assertEq(token.ownerOf(1), address(to1));
-        assertEq(token.balanceOf(address(to1)), 1);
+        assertEq(token.ownerOf(1), to);
+        assertEq(token.balanceOf(to), 1);
     }
 
     function testSafeMintToERC721RecipientWithData(bytes calldata data) public {
