@@ -8,9 +8,6 @@ import {ERC721TokenReceiver} from "./ERC721TokenReceiver.sol";
 
 /// @notice SSTORE2-backed version of Solmate's ERC721, optimized for minting in a single batch
 abstract contract SS2ERC721 is ERC721 {
-    // The mask of the lower 160 bits for addresses.
-    uint256 private constant _BITMASK_ADDRESS = (1 << 160) - 1;
-
     // The `Transfer` event signature is given by:
     // `keccak256(bytes("Transfer(address,address,uint256)"))`.
     bytes32 private constant _TRANSFER_EVENT_SIGNATURE =
@@ -266,9 +263,7 @@ abstract contract SS2ERC721 is ERC721 {
             require(to > prev, "ADDRESSES_NOT_SORTED");
             prev = to;
 
-            // borrowed from ERC721A.sol
-            // Mask `to` to the lower 160 bits, in case the upper bits somehow aren't clean.
-            uint256 toMasked = uint256(uint160(to)) & _BITMASK_ADDRESS;
+            // borrowed from ERC721A.sol, but no need to mask to because it is the output of a shr by 96 bits
             assembly {
                 // Emit the `Transfer` event.
                 log4(
@@ -276,7 +271,7 @@ abstract contract SS2ERC721 is ERC721 {
                     0, // End of data (0, since no data).
                     _TRANSFER_EVENT_SIGNATURE, // Signature.
                     0, // `from`.
-                    toMasked, // `to`.
+                    to,
                     i // `tokenId`.
                 )
             }
