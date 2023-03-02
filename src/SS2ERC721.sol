@@ -212,36 +212,12 @@ abstract contract SS2ERC721 is ERC721 {
                         INTERNAL MINT/BURN LOGIC
     //////////////////////////////////////////////////////////////*/
 
+    /// @dev specialized version that performs a batch mint with no safeMint checks
     function _mint(address pointer)
         internal
         virtual
         returns (uint256 numMinted)
     {
-        numMinted = _mint(pointer, false, "");
-    }
-
-    function _safeMint(address pointer)
-        internal
-        virtual
-        returns (uint256 numMinted)
-    {
-        numMinted = _mint(pointer, true, "");
-    }
-
-    function _safeMint(address pointer, bytes memory data)
-        internal
-        virtual
-        returns (uint256 numMinted)
-    {
-        numMinted = _mint(pointer, true, data);
-    }
-
-    // can only be called once
-    function _mint(
-        address pointer,
-        bool safeMint,
-        bytes memory safeMintData
-    ) internal virtual returns (uint256 numMinted) {
         require(_ownersPrimaryPointer == address(0), "ALREADY_MINTED");
 
         bytes memory addresses = SSTORE2.read(pointer);
@@ -249,8 +225,8 @@ abstract contract SS2ERC721 is ERC721 {
         require(length % 20 == 0, "INVALID_ADDRESSES");
 
         numMinted = length / 20;
-
         address prev = address(0);
+
         for (uint256 i = 0; i < numMinted; ) {
             address to;
 
@@ -259,7 +235,61 @@ abstract contract SS2ERC721 is ERC721 {
                 i := add(i, 1)
             }
 
-            // enforce that the addresses are sorted with no duplicates
+            // enforce that the addresses are sorted with no duplicates, and no zero addresses
+            require(to > prev, "ADDRESSES_NOT_SORTED");
+            prev = to;
+
+            // borrowed from ERC721A.sol, but no need to mask to because it is the output of a shr by 96 bits
+            assembly {
+                // Emit the `Transfer` event.
+                log4(
+                    0, // Start of data (0, since no data).
+                    0, // End of data (0, since no data).
+                    _TRANSFER_EVENT_SIGNATURE, // Signature.
+                    0, // `from`.
+                    to,
+                    i // `tokenId`.
+                )
+            }
+        }
+
+        // we do not explicitly set balanceOf for the primary owners
+        _ownersPrimaryPointer = pointer;
+    }
+
+    function _safeMint(address pointer)
+        internal
+        virtual
+        returns (uint256 numMinted)
+    {
+        numMinted = _safeMint(pointer, "");
+    }
+
+    /// @dev specialized version that performs a batch mint with a safeMint check at each iteration
+    /// @dev needs to be kept in sync with _mint(address)
+    function _safeMint(address pointer, bytes memory data)
+        internal
+        virtual
+        returns (uint256 numMinted)
+    {
+        require(_ownersPrimaryPointer == address(0), "ALREADY_MINTED");
+
+        bytes memory addresses = SSTORE2.read(pointer);
+        uint256 length = addresses.length;
+        require(length % 20 == 0, "INVALID_ADDRESSES");
+
+        numMinted = length / 20;
+        address prev = address(0);
+
+        for (uint256 i = 0; i < numMinted; ) {
+            address to;
+
+            assembly {
+                to := shr(96, mload(add(addresses, add(32, mul(i, 20)))))
+                i := add(i, 1)
+            }
+
+            // enforce that the addresses are sorted with no duplicates, and no zero addresses
             require(to > prev, "ADDRESSES_NOT_SORTED");
             prev = to;
 
@@ -276,12 +306,10 @@ abstract contract SS2ERC721 is ERC721 {
                 )
             }
 
-            if (safeMint) {
-                require(
-                    _checkOnERC721Received(address(0), to, i, safeMintData),
-                    "UNSAFE_RECIPIENT"
-                );
-            }
+            require(
+                _checkOnERC721Received(address(0), to, i, data),
+                "UNSAFE_RECIPIENT"
+            );
         }
 
         // we do not explicitly set balanceOf for the primary owners
