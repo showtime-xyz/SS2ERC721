@@ -1,6 +1,6 @@
 name: test
 
-on: workflow_dispatch
+on: [push, pull_request]
 
 env:
   FOUNDRY_PROFILE: ci
@@ -32,3 +32,5 @@ jobs:
         run: |
           forge test -vvv
         id: test
+        env:
+          FOUNDRY_PROFILE: superheavy_fuzz
