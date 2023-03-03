@@ -31,10 +31,7 @@ abstract contract Initializable {
     modifier initializer() {
         bool isTopLevelCall = _initState == InitState.NOT_INITIALIZED;
 
-        require(
-            (isTopLevelCall) || (_initState == InitState.INITIALIZING),
-            "ALREADY_INITIALIZED"
-        );
+        require((isTopLevelCall) || (_initState == InitState.INITIALIZING), "ALREADY_INITIALIZED");
         if (isTopLevelCall) {
             _initState = InitState.INITIALIZING;
         }
@@ -52,10 +49,7 @@ abstract contract Initializable {
 
     /// locks the contract, preventing any further initialization
     function _lockInitializers() internal virtual {
-        require(
-            _initState == InitState.NOT_INITIALIZED,
-            "MUST_BE_NOT_INITIALIZED"
-        );
+        require(_initState == InitState.NOT_INITIALIZED, "MUST_BE_NOT_INITIALIZED");
         _initState = InitState.INITIALIZED;
         emit Initialized();
     }

@@ -20,10 +20,7 @@ abstract contract ERC721I is ERC721, Initializable {
                               INITIALIZER
     //////////////////////////////////////////////////////////////*/
 
-    function __ERC721_init(string memory _name, string memory _symbol)
-        internal
-        onlyInitializing
-    {
+    function __ERC721_init(string memory _name, string memory _symbol) internal onlyInitializing {
         name = _name;
         symbol = _symbol;
     }

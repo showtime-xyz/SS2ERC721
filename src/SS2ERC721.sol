@@ -13,6 +13,8 @@ abstract contract SS2ERC721 is ERC721 {
     bytes32 private constant _TRANSFER_EVENT_SIGNATURE =
         0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef;
 
+    address internal constant BURN_ADDRESS = address(0xdead);
+
     /*//////////////////////////////////////////////////////////////
                       ERC721 BALANCE/OWNER STORAGE
     //////////////////////////////////////////////////////////////*/
@@ -49,11 +51,7 @@ abstract contract SS2ERC721 is ERC721 {
     //////////////////////////////////////////////////////////////*/
 
     // borrowed from https://github.com/ensdomains/resolvers/blob/master/contracts/ResolverBase.sol
-    function bytesToAddress(bytes memory b)
-        internal
-        pure
-        returns (address payable a)
-    {
+    function bytesToAddress(bytes memory b) internal pure returns (address payable a) {
         require(b.length == 20);
         assembly {
             a := div(mload(add(b, 32)), exp(256, 12))
@@ -75,9 +73,7 @@ abstract contract SS2ERC721 is ERC721 {
 
         unchecked {
             uint256 start = (id - 1) * 20;
-            owner = bytesToAddress(
-                SSTORE2.read(_ownersPrimaryPointer, start, start + 20)
-            );
+            owner = bytesToAddress(SSTORE2.read(_ownersPrimaryPointer, start, start + 20));
         }
     }
 
@@ -120,8 +116,7 @@ abstract contract SS2ERC721 is ERC721 {
     function balanceOf(address owner) public view virtual override returns (uint256) {
         require(owner != address(0), "ZERO_ADDRESS");
 
-        int256 balance = int256(_balanceOfPrimary(owner)) +
-            _balanceOfAdjustment[owner];
+        int256 balance = int256(_balanceOfPrimary(owner)) + _balanceOfAdjustment[owner];
 
         require(balance >= 0, "OVERFLOW");
 
@@ -140,75 +135,61 @@ abstract contract SS2ERC721 is ERC721 {
         // need to use the ownerOf getter here instead of directly accessing the storage
         address owner = ownerOf(id);
 
-        require(
-            msg.sender == owner || isApprovedForAll[owner][msg.sender],
-            "NOT_AUTHORIZED"
-        );
+        require(msg.sender == owner || isApprovedForAll[owner][msg.sender], "NOT_AUTHORIZED");
 
         getApproved[id] = spender;
 
         emit Approval(owner, spender, id);
     }
 
-    function transferFrom(
-        address from,
-        address to,
-        uint256 id
-    ) public virtual override {
+    function transferFrom(address from, address to, uint256 id) public virtual override {
         // need to use the ownerOf getter here instead of directly accessing the storage
         require(from == ownerOf(id), "WRONG_FROM");
 
         require(to != address(0), "INVALID_RECIPIENT");
 
         require(
-            msg.sender == from || isApprovedForAll[from][msg.sender] || msg.sender == getApproved[id],
-            "NOT_AUTHORIZED"
+            msg.sender == from || isApprovedForAll[from][msg.sender] || msg.sender == getApproved[id], "NOT_AUTHORIZED"
         );
 
-        // Underflow of the sender's balance is impossible because we check for
-        // ownership above and the recipient's balance can't realistically overflow.
-        unchecked {
-            _balanceOfAdjustment[from]--;
+        if (to == BURN_ADDRESS) {
+            _burn(id);
+        } else {
+            // Underflow of the sender's balance is impossible because we check for
+            // ownership above and the recipient's balance can't realistically overflow.
+            unchecked {
+                _balanceOfAdjustment[from]--;
+                _balanceOfAdjustment[to]++;
+            }
 
-            _balanceOfAdjustment[to]++;
+            _ownerOfSecondary[id] = to;
+
+            delete getApproved[id];
+
+            emit Transfer(from, to, id);
         }
-
-        _ownerOfSecondary[id] = to;
-
-        delete getApproved[id];
-
-        emit Transfer(from, to, id);
     }
 
     /// @dev needs to be overridden here to invoke our custom version of transferFrom
-    function safeTransferFrom(
-        address from,
-        address to,
-        uint256 id
-    ) public virtual override {
+    function safeTransferFrom(address from, address to, uint256 id) public virtual override {
         transferFrom(from, to, id);
 
         require(
-            to.code.length == 0 ||
-                ERC721TokenReceiver(to).onERC721Received(msg.sender, from, id, "") ==
-                ERC721TokenReceiver.onERC721Received.selector,
+            to.code.length == 0
+                || ERC721TokenReceiver(to).onERC721Received(msg.sender, from, id, "")
+                    == ERC721TokenReceiver.onERC721Received.selector,
             "UNSAFE_RECIPIENT"
         );
     }
 
     /// @dev needs to be overridden here to invoke our custom version of transferFrom
-    function safeTransferFrom(
-        address from,
-        address to,
-        uint256 id,
-        bytes calldata data
-    ) public virtual override {
+    function safeTransferFrom(address from, address to, uint256 id, bytes calldata data) public virtual override {
         transferFrom(from, to, id);
 
         require(
-            to.code.length == 0 ||
-                ERC721TokenReceiver(to).onERC721Received(msg.sender, from, id, data) ==
-                ERC721TokenReceiver.onERC721Received.selector,
+            to.code.length == 0
+                || ERC721TokenReceiver(to).onERC721Received(msg.sender, from, id, data)
+                    == ERC721TokenReceiver.onERC721Received.selector,
             "UNSAFE_RECIPIENT"
         );
     }
@@ -218,11 +199,7 @@ abstract contract SS2ERC721 is ERC721 {
     //////////////////////////////////////////////////////////////*/
 
     /// @dev specialized version that performs a batch mint with no safeMint checks
-    function _mint(address pointer)
-        internal
-        virtual
-        returns (uint256 numMinted)
-    {
+    function _mint(address pointer) internal virtual returns (uint256 numMinted) {
         require(_ownersPrimaryPointer == address(0), "ALREADY_MINTED");
 
         bytes memory addresses = SSTORE2.read(pointer);
@@ -232,7 +209,7 @@ abstract contract SS2ERC721 is ERC721 {
         numMinted = length / 20;
         address prev = address(0);
 
-        for (uint256 i = 0; i < numMinted; ) {
+        for (uint256 i = 0; i < numMinted;) {
             address to;
 
             assembly {
@@ -262,21 +239,13 @@ abstract contract SS2ERC721 is ERC721 {
         _ownersPrimaryPointer = pointer;
     }
 
-    function _safeMint(address pointer)
-        internal
-        virtual
-        returns (uint256 numMinted)
-    {
+    function _safeMint(address pointer) internal virtual returns (uint256 numMinted) {
         numMinted = _safeMint(pointer, "");
     }
 
     /// @dev specialized version that performs a batch mint with a safeMint check at each iteration
     /// @dev needs to be kept in sync with _mint(address)
-    function _safeMint(address pointer, bytes memory data)
-        internal
-        virtual
-        returns (uint256 numMinted)
-    {
+    function _safeMint(address pointer, bytes memory data) internal virtual returns (uint256 numMinted) {
         require(_ownersPrimaryPointer == address(0), "ALREADY_MINTED");
 
         bytes memory addresses = SSTORE2.read(pointer);
@@ -286,7 +255,7 @@ abstract contract SS2ERC721 is ERC721 {
         numMinted = length / 20;
         address prev = address(0);
 
-        for (uint256 i = 0; i < numMinted; ) {
+        for (uint256 i = 0; i < numMinted;) {
             address to;
 
             assembly {
@@ -311,10 +280,7 @@ abstract contract SS2ERC721 is ERC721 {
                 )
             }
 
-            require(
-                _checkOnERC721Received(address(0), to, i, data),
-                "UNSAFE_RECIPIENT"
-            );
+            require(_checkOnERC721Received(address(0), to, i, data), "UNSAFE_RECIPIENT");
         }
 
         // we do not explicitly set balanceOf for the primary owners
@@ -331,11 +297,11 @@ abstract contract SS2ERC721 is ERC721 {
             _balanceOfAdjustment[owner]--;
         }
 
-        _ownerOfSecondary[id] = address(0xdead);
+        _ownerOfSecondary[id] = BURN_ADDRESS;
 
         delete getApproved[id];
 
-        emit Transfer(owner, address(0xdead), id);
+        emit Transfer(owner, BURN_ADDRESS, id);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -352,24 +318,15 @@ abstract contract SS2ERC721 is ERC721 {
      * @param data bytes optional data to send along with the call
      * @return bool whether the call correctly returned the expected magic value
      */
-    function _checkOnERC721Received(
-        address from,
-        address to,
-        uint256 tokenId,
-        bytes memory data
-    ) private returns (bool) {
+    function _checkOnERC721Received(address from, address to, uint256 tokenId, bytes memory data)
+        private
+        returns (bool)
+    {
         if (to.code.length == 0) {
             return true;
         }
 
-        try
-            ERC721TokenReceiver(to).onERC721Received(
-                msg.sender,
-                from,
-                tokenId,
-                data
-            )
-        returns (bytes4 retval) {
+        try ERC721TokenReceiver(to).onERC721Received(msg.sender, from, tokenId, data) returns (bytes4 retval) {
             return retval == ERC721TokenReceiver.onERC721Received.selector;
         } catch (bytes memory reason) {
             if (reason.length == 0) {

@@ -7,9 +7,7 @@ import {SSTORE2} from "solmate/utils/SSTORE2.sol";
 import {SS2ERC721} from "src/SS2ERC721.sol";
 
 contract BasicSS2ERC721 is SS2ERC721 {
-    constructor(string memory name_, string memory symbol_)
-        SS2ERC721(name_, symbol_)
-    {}
+    constructor(string memory name_, string memory symbol_) SS2ERC721(name_, symbol_) {}
 
     function mint(address ptr) public {
         _mint(ptr);
@@ -25,6 +23,7 @@ contract BasicERC721Test is Test {
     BasicSS2ERC721 nftContract_preminted;
     BasicSS2ERC721 nftContract_pretransferred;
 
+    address ptr1000;
 
     address private alice = makeAddr("alice");
     address private bob = makeAddr("bob");
@@ -47,6 +46,9 @@ contract BasicERC721Test is Test {
 
         vm.prank(bob);
         nftContract_pretransferred.transferFrom(bob, alice, 1);
+
+        // set up the 1000 token test
+        ptr1000 = SSTORE2.write(make(1000));
     }
 
     /// @dev code from nft-editions/utils/Addresses.sol
@@ -56,13 +58,7 @@ contract BasicERC721Test is Test {
             let data := add(addresses, 32)
 
             let addr := 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE
-            for {
-                let i := n
-            } gt(i, 0) {
-                i := sub(i, 1)
-            } {
-                mstore(add(data, sub(mul(i, 20), 32)), add(addr, i))
-            }
+            for { let i := n } gt(i, 0) { i := sub(i, 1) } { mstore(add(data, sub(mul(i, 20), 32)), add(addr, i)) }
 
             let last := add(data, mul(n, 20))
 
@@ -95,6 +91,10 @@ contract BasicERC721Test is Test {
 
     function test_mint_newcomer_1000() public {
         mint(1000);
+    }
+
+    function test_mint_existingPointer_1000() public {
+        nftContract.mint(ptr1000);
     }
 
     function test_transferFrom_initial() public {
