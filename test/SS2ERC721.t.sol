@@ -547,6 +547,7 @@ contract ERC721Test is Test {
 
     function testTransferFromSelf(address to) public {
         vm.assume(to != address(0));
+        vm.assume(to != address(this));
         vm.assume(to != BURN_ADDRESS);
 
         token.mint(address(this));
