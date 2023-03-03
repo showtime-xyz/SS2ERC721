@@ -3,6 +3,7 @@ pragma solidity >=0.8.0;
 
 import {Test} from "forge-std/Test.sol";
 
+import {Owned} from "solmate/auth/Owned.sol";
 import {SSTORE2} from "solmate/utils/SSTORE2.sol";
 
 import {ERC721TokenReceiver} from "src/ERC721TokenReceiver.sol";
@@ -51,8 +52,11 @@ contract WrongReturnDataERC721Recipient is ERC721TokenReceiver {
     }
 }
 
-contract MockERC721 is SS2ERC721 {
-    constructor(string memory _name, string memory _symbol) SS2ERC721(_name, _symbol) {}
+contract MockERC721 is SS2ERC721, Owned {
+    constructor(string memory _name, string memory _symbol)
+        SS2ERC721(_name, _symbol)
+        Owned(msg.sender)
+        {}
 
     function tokenURI(uint256)
         public
@@ -99,10 +103,13 @@ contract MockERC721 is SS2ERC721 {
         _mint(pointer);
     }
 
+    // public wrapper for transferring to the burn address
     function burn(uint256 id) public {
-        if (msg.sender != ownerOf(id)) {
-            revert("WRONG_FROM");
-        }
+        transferFrom(ownerOf(id), address(0xdead), id);
+    }
+
+    //
+    function burnByContractOwner(uint256 id) public onlyOwner {
         _burn(id);
     }
 }
@@ -111,6 +118,8 @@ contract NonERC721Recipient {}
 
 /// @notice Test suite for ERC721 based on solmate's
 contract ERC721Test is Test {
+    address internal constant BURN_ADDRESS = address(0xdead);
+
     MockERC721 token;
 
     address happyRecipient;
@@ -152,23 +161,6 @@ contract ERC721Test is Test {
         assertEq(token.balanceOf(address(0xBEEF)), 0);
     }
 
-    function testOwnerOfBeforeMint(uint256 n) public {
-        vm.assume(n > 0);
-        vm.expectRevert("NOT_MINTED");
-        token.ownerOf(n);
-    }
-
-    function testMint2() public {
-        address to1 = 0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa;
-        address to2 = 0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB;
-
-        token.mint(to1, to2);
-        assertEq(token.balanceOf(to1), 1);
-        assertEq(token.balanceOf(to2), 1);
-        assertEq(token.ownerOf(1), to1);
-        assertEq(token.ownerOf(2), to2);
-    }
-
     function testBurn() public {
         token.mint(address(0xBEEF), address(0xBFFF));
 
@@ -197,6 +189,24 @@ contract ERC721Test is Test {
         assertEq(token.balanceOf(address(this)), 0);
         assertEq(token.getApproved(1), address(0));
 
+        assertEq(token.ownerOf(1), address(0xdead));
+    }
+
+    function testUnauthorizedBurn() public {
+        token.mint(address(0xc0ffee));
+
+        vm.expectRevert("NOT_AUTHORIZED");
+        token.burn(1);
+
+        assertEq(token.balanceOf(address(0xc0ffee)), 1);
+    }
+
+    function testBurnByAdmin() public {
+        token.mint(address(0xc0ffee));
+
+        token.burnByContractOwner(1);
+
+        assertEq(token.balanceOf(address(0xc0ffee)), 0);
         assertEq(token.ownerOf(1), address(0xdead));
     }
 
@@ -358,7 +368,7 @@ contract ERC721Test is Test {
         token.mint(address(this));
         token.burn(1);
 
-        vm.expectRevert("WRONG_FROM");
+        vm.expectRevert("NOT_AUTHORIZED");
         token.burn(1);
     }
 
@@ -548,7 +558,7 @@ contract ERC721Test is Test {
 
         assertEq(token.balanceOf(to), 0);
 
-        assertEq(token.ownerOf(1), address(0xdead));
+        assertEq(token.ownerOf(1), BURN_ADDRESS);
     }
 
     function testApprove(address to) public {
@@ -564,12 +574,14 @@ contract ERC721Test is Test {
 
         token.mint(address(this));
         token.approve(address(to), 1);
+
+        vm.prank(to);
         token.burn(1);
 
         assertEq(token.balanceOf(address(this)), 0);
         assertEq(token.getApproved(1), address(0));
 
-        assertEq(token.ownerOf(1), address(0xdead));
+        assertEq(token.ownerOf(1), BURN_ADDRESS);
     }
 
     function testApproveAll(address to, bool approved) public {
@@ -579,12 +591,12 @@ contract ERC721Test is Test {
     }
 
     function testTransferFrom(address from, address to) public {
-        vm.assume(address(0) < from);
-        vm.assume(from < address(this));
+        vm.assume(from != address(0));
+        vm.assume(to != address(0));
+        vm.assume(to != from);
+        vm.assume(to != BURN_ADDRESS);
 
-        if (to == address(0) || to == from || to == address(this)) to = address(0xBEEF);
-
-        token.mint(from, address(this));
+        token.mint(from);
 
         vm.prank(from);
         token.approve(address(this), 1);
@@ -599,6 +611,7 @@ contract ERC721Test is Test {
 
     function testTransferFromSelf(address to) public {
         vm.assume(to != address(0));
+        vm.assume(to != BURN_ADDRESS);
 
         token.mint(address(this));
 
@@ -611,12 +624,12 @@ contract ERC721Test is Test {
     }
 
     function testTransferFromApproveAll(address from, address to) public {
-        vm.assume(address(0) < from);
-        vm.assume(from < address(this));
+        vm.assume(from != address(0));
+        vm.assume(to != address(0));
+        vm.assume(to != from);
+        vm.assume(to != BURN_ADDRESS);
 
-        if (to == address(0) || to == from || to == address(this)) to = address(0xBEEF);
-
-        token.mint(from, address(this));
+        token.mint(from);
 
         vm.prank(from);
         token.setApprovalForAll(address(this), true);
@@ -635,6 +648,7 @@ contract ERC721Test is Test {
         vm.assume(to.code.length == 0);
         vm.assume(to != address(this));
         vm.assume(to != from);
+        vm.assume(to != BURN_ADDRESS);
 
         token.mint(from);
 
@@ -738,7 +752,7 @@ contract ERC721Test is Test {
         vm.prank(to);
         token.burn(1);
 
-        vm.expectRevert("WRONG_FROM");
+        vm.expectRevert("NOT_AUTHORIZED");
         vm.prank(to);
         token.burn(1);
     }
@@ -857,7 +871,10 @@ contract ERC721Test is Test {
         token.safeMint(wrongReturnDataRecipient, data);
     }
 
-    function testFailOwnerOfUnminted(uint256 id) public view {
+    function test_ownerOf_unminted_reverts(uint256 id) public {
+        vm.assume(id != 0);
+
+        vm.expectRevert("NOT_MINTED");
         token.ownerOf(id);
     }
 }

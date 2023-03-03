@@ -13,6 +13,8 @@ abstract contract SS2ERC721 is ERC721 {
     bytes32 private constant _TRANSFER_EVENT_SIGNATURE =
         0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef;
 
+    address internal constant BURN_ADDRESS = address(0xdead);
+
     /*//////////////////////////////////////////////////////////////
                       ERC721 BALANCE/OWNER STORAGE
     //////////////////////////////////////////////////////////////*/
@@ -165,19 +167,22 @@ abstract contract SS2ERC721 is ERC721 {
             "NOT_AUTHORIZED"
         );
 
-        // Underflow of the sender's balance is impossible because we check for
-        // ownership above and the recipient's balance can't realistically overflow.
-        unchecked {
-            _balanceOfAdjustment[from]--;
+        if (to == BURN_ADDRESS) {
+            _burn(id);
+        } else {
+            // Underflow of the sender's balance is impossible because we check for
+            // ownership above and the recipient's balance can't realistically overflow.
+            unchecked {
+                _balanceOfAdjustment[from]--;
+                _balanceOfAdjustment[to]++;
+            }
 
-            _balanceOfAdjustment[to]++;
+            _ownerOfSecondary[id] = to;
+
+            delete getApproved[id];
+
+            emit Transfer(from, to, id);
         }
-
-        _ownerOfSecondary[id] = to;
-
-        delete getApproved[id];
-
-        emit Transfer(from, to, id);
     }
 
     /// @dev needs to be overridden here to invoke our custom version of transferFrom
@@ -331,11 +336,11 @@ abstract contract SS2ERC721 is ERC721 {
             _balanceOfAdjustment[owner]--;
         }
 
-        _ownerOfSecondary[id] = address(0xdead);
+        _ownerOfSecondary[id] = BURN_ADDRESS;
 
         delete getApproved[id];
 
-        emit Transfer(owner, address(0xdead), id);
+        emit Transfer(owner, BURN_ADDRESS, id);
     }
 
     /*//////////////////////////////////////////////////////////////

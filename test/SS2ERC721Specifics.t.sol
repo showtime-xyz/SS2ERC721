@@ -121,6 +121,16 @@ contract SS2ERC721Specifics is Test {
         token.mint(ptr);
     }
 
+    function test_transferFrom_toBurnAddressDoesBurn() public {
+        address ptr = SSTORE2.write(abi.encodePacked(address(this)));
+        token.mint(ptr);
+
+        token.transferFrom(address(this), BURN_ADDRESS, 1);
+        assertEq(token.balanceOf(address(this)), 0);
+        assertEq(token.ownerOf(1), BURN_ADDRESS);
+        assertEq(token.balanceOf(BURN_ADDRESS), 0);
+    }
+
     function test_e2e() public {
         address alice = makeAddr("alice");
         address bob = address(uint160(alice) + 1);
