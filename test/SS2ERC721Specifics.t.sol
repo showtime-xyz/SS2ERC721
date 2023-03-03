@@ -7,9 +7,7 @@ import {SSTORE2} from "solmate/utils/SSTORE2.sol";
 import {SS2ERC721} from "src/SS2ERC721.sol";
 
 contract BasicSS2ERC721 is SS2ERC721 {
-    constructor(string memory name_, string memory symbol_)
-        SS2ERC721(name_, symbol_)
-    {}
+    constructor(string memory name_, string memory symbol_) SS2ERC721(name_, symbol_) {}
 
     function mint(address ptr) public returns (uint256 numMinted) {
         numMinted = _mint(ptr);

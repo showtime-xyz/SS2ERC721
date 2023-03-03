@@ -18,10 +18,7 @@ abstract contract SS2ERC721I is SS2ERC721, Initializable {
                               INITIALIZER
     //////////////////////////////////////////////////////////////*/
 
-    function __SS2ERC721_init(string memory _name, string memory _symbol)
-        internal
-        onlyInitializing
-    {
+    function __SS2ERC721_init(string memory _name, string memory _symbol) internal onlyInitializing {
         name = _name;
         symbol = _symbol;
     }
