@@ -109,6 +109,7 @@ contract MockERC721 is SS2ERC721 {
 
 contract NonERC721Recipient {}
 
+/// @notice Test suite for ERC721 based on solmate's
 contract ERC721Test is Test {
     MockERC721 token;
 
@@ -655,6 +656,7 @@ contract ERC721Test is Test {
 
     function testSafeTransferFromToERC721Recipient(address from) public {
         from = bound_min(from, 20);
+        vm.assume(from != happyRecipient);
 
         ERC721Recipient recipient = ERC721Recipient(happyRecipient);
 

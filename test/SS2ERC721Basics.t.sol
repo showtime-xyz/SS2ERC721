@@ -15,7 +15,7 @@ contract BasicSS2ERC721 is SS2ERC721 {
         _mint(ptr);
     }
 
-    function tokenURI(uint256 id) public view virtual override returns (string memory) {
+    function tokenURI(uint256) public view virtual override returns (string memory) {
         return "";
     }
 }
@@ -107,11 +107,11 @@ contract BasicERC721Test is Test {
         nftContract_pretransferred.transferFrom(alice, bob, 1);
     }
 
-    function test_balanceOf() public {
+    function test_balanceOf() public view {
         nftContract_preminted.balanceOf(alice);
     }
 
-    function test_ownerOf() public {
+    function test_ownerOf() public view {
         nftContract_preminted.ownerOf(1);
     }
 }
