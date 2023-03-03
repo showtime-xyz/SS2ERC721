@@ -65,6 +65,7 @@ abstract contract SS2ERC721 is ERC721 {
             return 0;
         }
 
+        // checked math will underflow if _ownersPrimaryPointer.code.length == 0
         return (_ownersPrimaryPointer.code.length - 1) / 20;
     }
 
@@ -125,6 +126,10 @@ abstract contract SS2ERC721 is ERC721 {
         require(balance >= 0, "OVERFLOW");
 
         return uint256(balance);
+    }
+
+    function getOwnersPrimaryPointer() public view returns (address) {
+        return _ownersPrimaryPointer;
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -222,7 +227,7 @@ abstract contract SS2ERC721 is ERC721 {
 
         bytes memory addresses = SSTORE2.read(pointer);
         uint256 length = addresses.length;
-        require(length % 20 == 0, "INVALID_ADDRESSES");
+        require(length > 0 && length % 20 == 0, "INVALID_ADDRESSES");
 
         numMinted = length / 20;
         address prev = address(0);
@@ -276,7 +281,7 @@ abstract contract SS2ERC721 is ERC721 {
 
         bytes memory addresses = SSTORE2.read(pointer);
         uint256 length = addresses.length;
-        require(length % 20 == 0, "INVALID_ADDRESSES");
+        require(length > 0 && length % 20 == 0, "INVALID_ADDRESSES");
 
         numMinted = length / 20;
         address prev = address(0);
