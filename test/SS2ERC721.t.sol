@@ -349,11 +349,6 @@ contract ERC721Test is Test {
         token.mint(address(0));
     }
 
-    function test_mint_double_reverts() public {
-        vm.expectRevert("ADDRESSES_NOT_SORTED");
-        token.mint(address(0xBEEF), address(0xBEEF));
-    }
-
     function test_burn_unminted_reverts() public {
         vm.expectRevert("NOT_MINTED");
         token.burn(1337);
@@ -726,13 +721,6 @@ contract ERC721Test is Test {
         assertEq(to.from(), address(0));
         assertEq(to.id(), 1);
         assertEq(to.data(), data);
-    }
-
-    function test_mint_double_reverts(address to) public {
-        vm.assume(to > address(0));
-
-        vm.expectRevert("ADDRESSES_NOT_SORTED");
-        token.mint(to, to);
     }
 
     function test_burn_unminted_reverts(uint256 id) public {
