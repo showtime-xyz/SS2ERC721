@@ -47,23 +47,17 @@ contract MockERC721 is SS2ERC721, Owned {
 
     function tokenURI(uint256) public pure virtual override returns (string memory) {}
 
-    function safeMint(address addr) public {
+    function safeMint(address addr) public returns (bool collision) {
         address pointer = SSTORE2.write(abi.encodePacked(addr));
-        _safeMint(pointer);
-    }
+        if (pointer == addr) {
+            return true;
+        }
 
-    function safeMint(address addr1, address addr2) public {
-        address pointer = SSTORE2.write(abi.encodePacked(addr1, addr2));
         _safeMint(pointer);
     }
 
     function safeMint(address addr1, bytes memory data) public {
         address pointer = SSTORE2.write(abi.encodePacked(addr1));
-        _safeMint(pointer, data);
-    }
-
-    function safeMint(address addr1, address addr2, bytes memory data) public {
-        address pointer = SSTORE2.write(abi.encodePacked(addr1, addr2));
         _safeMint(pointer, data);
     }
 
@@ -294,7 +288,7 @@ contract ERC721Test is Test {
     }
 
     function testSafeMintToEOA() public {
-        token.safeMint(address(0xBEEF), address(0xBFFF));
+        token.safeMint(address(0xBEEF));
 
         assertEq(token.ownerOf(1), address(0xBEEF));
         assertEq(token.balanceOf(address(0xBEEF)), 1);
@@ -648,11 +642,13 @@ contract ERC721Test is Test {
 
     function testSafeMintToEOA(address to) public {
         to = bound_min(to, 20);
-
-        token.safeMint(to);
-
-        // checking after the mint, because `to` may be the deployed SSTORE2 ptr
         vm.assume(to.code.length == 0);
+
+        bool collision = token.safeMint(to);
+
+        // a collision means that `to` is the address of the SSTORE2 ptr
+        // clearly at this point, this is not an EOA so we stop the test
+        vm.assume(!collision);
 
         assertEq(token.ownerOf(1), to);
         assertEq(token.balanceOf(to), 1);
