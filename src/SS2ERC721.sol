@@ -113,14 +113,17 @@ abstract contract SS2ERC721 is ERC721 {
         require(owner != address(0), "NOT_MINTED");
     }
 
-    function balanceOf(address owner) public view virtual override returns (uint256) {
+    function balanceOf(address owner) public view virtual override returns (uint256 balance) {
         require(owner != address(0), "ZERO_ADDRESS");
 
-        int256 balance = int256(_balanceOfPrimary(owner)) + _balanceOfAdjustment[owner];
-
-        require(balance >= 0, "OVERFLOW");
-
-        return uint256(balance);
+        // if balanceOfAdjustment < 0 then it means the primary owner has transferred out their token
+        // and we can safely return 0 which the named return is already initialized to
+        int256 balanceOfAdjustment = _balanceOfAdjustment[owner];
+        if (balanceOfAdjustment >= 0) {
+            int256 balanceInt = int256(_balanceOfPrimary(owner)) + balanceOfAdjustment;
+            require(balanceInt >= 0, "OVERFLOW");
+            balance = uint256(balanceInt);
+        }
     }
 
     /*//////////////////////////////////////////////////////////////
