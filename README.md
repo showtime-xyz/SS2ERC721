@@ -1,3 +1,5 @@
+![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0) ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) ![tests](https://github.com/showtime-xyz/SS2ERC721/actions/workflows/test.yml/badge.svg?branch=main)
+
 # SS2ERC721
 
 SS2ERC721 is an experimental ERC721 base contract that aims to provide **hyper-optimized batch mints** to a **large number of distinct recipients** in a single transaction by storing the list of recipient addresses as an SSTORE2 pointer.
