@@ -5,6 +5,9 @@ libs = ['lib']
 
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config
 
+[rpc_endpoints]
+anvil = "http://localhost:8545"
+
 [profile.heavy_fuzz.fuzz]
 runs = 10000
 
