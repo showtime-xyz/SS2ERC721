@@ -324,4 +324,4 @@ We took some inspiration, and sometimes actual code snippets from these projects
 - [ERC721A](https://github.com/chiru-labs/ERC721A)
 - [OpenZeppelin](https://github.com/OpenZeppelin/openzeppelin-contracts)
 
-Thanks to [horsefacts](https://twitter.com/eth_call) and [t11s](https://twitter.com/transmissions11/) for their feedback
+Thanks to [horsefacts](https://twitter.com/eth_call), [t11s](https://twitter.com/transmissions11/) and [vectorized.eth](https://twitter.com/optimizoor/) for their feedback
