@@ -120,9 +120,11 @@ abstract contract SS2ERC721 is ERC721 {
         // and we can safely return 0 which the named return is already initialized to
         int256 balanceOfAdjustment = _balanceOfAdjustment[owner];
         if (balanceOfAdjustment >= 0) {
-            int256 balanceInt = int256(_balanceOfPrimary(owner)) + balanceOfAdjustment;
-            require(balanceInt >= 0, "OVERFLOW");
-            balance = uint256(balanceInt);
+            unchecked {
+                int256 balanceInt = int256(_balanceOfPrimary(owner)) + balanceOfAdjustment;
+                require(balanceInt >= 0, "OVERFLOW");
+                balance = uint256(balanceInt);
+            }
         }
     }
 
