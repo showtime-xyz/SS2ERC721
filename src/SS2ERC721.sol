@@ -151,10 +151,11 @@ abstract contract SS2ERC721 is ERC721 {
         if (to == BURN_ADDRESS) {
             _burn(id);
         } else {
-            // Underflow of the sender's balance is impossible because we check for
-            // ownership above and the recipient's balance can't realistically overflow.
             unchecked {
+                // signed math, can become negative
                 _balanceOfAdjustment[from]--;
+
+                // counter, can not overflow
                 _balanceOfAdjustment[to]++;
             }
 

@@ -154,15 +154,15 @@ mapping(uint256 => address) internal _ownerOfSecondary;
 In `ownerOf(uint256 tokenId)`, we first look up the `_ownerOfSecondary` mapping. If we get `address(0)` back, we know that this tokenId has not been transferred and we need to fall back to the primary owners pointer. For this, we do an O(1) lookup by loading only the necessary slice using SSTORE2 (the owner of tokenId n is the nth 20-byte entry in the buffer):
 
 ```solidity
-		function _ownerOfPrimary(uint256 id) internal view returns (address owner) {
-        require(id > 0, "ZERO_ID");
-        require(id <= _ownersPrimaryLength(), "NOT_MINTED");
+function _ownerOfPrimary(uint256 id) internal view returns (address owner) {
+    require(id > 0, "ZERO_ID");
+    require(id <= _ownersPrimaryLength(), "NOT_MINTED");
 
-        unchecked {
-            uint256 start = (id - 1) * 20;
-            owner = bytesToAddress(SSTORE2.read(_ownersPrimaryPointer, start, start + 20));
-        }
+    unchecked {
+        uint256 start = (id - 1) * 20;
+        owner = bytesToAddress(SSTORE2.read(_ownersPrimaryPointer, start, start + 20));
     }
+}
 ```
 
 **Complexity**: O(1)
@@ -214,7 +214,7 @@ After that, we add the signed `_balanceOfAdjustment[owner]`, convert back to a `
 
 ```solidity
 function balanceOf(address owner)
-		public view virtual override returns (uint256)
+    public view virtual override returns (uint256)
 {
     require(owner != address(0), "ZERO_ADDRESS");
 
@@ -245,17 +245,20 @@ It works just like a regular ERC721 `transferFrom`, except that we operate on th
 
 ```solidity
 function transferFrom(address from, address to, uint256 id) public virtual override {
-		// need to use the ownerOf getter here instead of directly accessing the storage
+    // need to use the ownerOf getter here instead of directly accessing the storage
     require(from == ownerOf(id), "WRONG_FROM");
-		...
+    ...
 
-		unchecked {
-		    _balanceOfAdjustment[from]--;
-		    _balanceOfAdjustment[to]++;
-		}
+    unchecked {
+        // signed math, can become negative
+        _balanceOfAdjustment[from]--;
 
-		_ownerOfSecondary[id] = to;
-		delete getApproved[id];
+        // counter, can not overflow
+        _balanceOfAdjustment[to]++;
+    }
+
+    _ownerOfSecondary[id] = to;
+    delete getApproved[id];
     emit Transfer(from, to, id);
 }
 ```
