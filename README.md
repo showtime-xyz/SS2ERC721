@@ -1,4 +1,4 @@
-![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0) ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) ![tests](https://github.com/showtime-xyz/SS2ERC721/actions/workflows/test.yml/badge.svg?branch=main)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) ![tests](https://github.com/showtime-xyz/SS2ERC721/actions/workflows/test.yml/badge.svg?branch=main)
 
 # SS2ERC721
 
