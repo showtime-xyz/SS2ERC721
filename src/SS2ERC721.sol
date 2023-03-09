@@ -123,10 +123,6 @@ abstract contract SS2ERC721 is ERC721 {
         return uint256(balance);
     }
 
-    function getOwnersPrimaryPointer() public view returns (address) {
-        return _ownersPrimaryPointer;
-    }
-
     /*//////////////////////////////////////////////////////////////
                               ERC721 LOGIC
     //////////////////////////////////////////////////////////////*/
