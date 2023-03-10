@@ -35,8 +35,11 @@ abstract contract SS2ERC721 is ERC721 {
 
     mapping(uint256 => address) internal _ownerOfSecondary;
 
-    /// @dev signed integer to allow for negative adjustments relative to _ownersPrimary
-    mapping(address => int256) internal _balanceOfAdjustment;
+    /// @dev 255-bit balance + 1-bit not primary owner flag
+    mapping(address => uint256) internal _balanceIndicator;
+
+    uint256 internal constant NOT_PRIMARY_OWNER_FLAG = 1 << 255;
+    uint256 internal constant BALANCE_MASK = 0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
 
     /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
@@ -114,15 +117,11 @@ abstract contract SS2ERC721 is ERC721 {
     function balanceOf(address owner) public view virtual override returns (uint256 balance) {
         require(owner != address(0), "ZERO_ADDRESS");
 
-        // if balanceOfAdjustment < 0 then it means the primary owner has transferred out their token
-        // and we can safely return 0 which the named return is already initialized to
-        int256 balanceOfAdjustment = _balanceOfAdjustment[owner];
-        if (balanceOfAdjustment >= 0) {
-            unchecked {
-                int256 balanceInt = int256(_balanceOfPrimary(owner)) + balanceOfAdjustment;
-                require(balanceInt >= 0, "OVERFLOW");
-                balance = uint256(balanceInt);
-            }
+        uint256 balanceIndicator = _balanceIndicator[owner];
+        balance = balanceIndicator & BALANCE_MASK;
+
+        if (balanceIndicator & NOT_PRIMARY_OWNER_FLAG == 0) {
+            balance += _balanceOfPrimary(owner);
         }
     }
 
@@ -142,31 +141,16 @@ abstract contract SS2ERC721 is ERC721 {
     }
 
     function transferFrom(address from, address to, uint256 id) public virtual override {
-        // need to use the ownerOf getter here instead of directly accessing the storage
-        require(from == ownerOf(id), "WRONG_FROM");
-
-        require(to != address(0), "INVALID_RECIPIENT");
-
         require(
             msg.sender == from || isApprovedForAll[from][msg.sender] || msg.sender == getApproved[id], "NOT_AUTHORIZED"
         );
-
-        if (to == BURN_ADDRESS) {
-            _burn(id);
-        } else {
+        require(to != address(0), "INVALID_RECIPIENT");
+        address owner = _moveTokenTo(id, to);
+        require(from == owner, "WRONG_FROM");
+        if (to != BURN_ADDRESS) {
             unchecked {
-                // signed math, can become negative
-                _balanceOfAdjustment[from]--;
-
-                // counter, can not overflow
-                _balanceOfAdjustment[to]++;
+                _balanceIndicator[to]++;
             }
-
-            _ownerOfSecondary[id] = to;
-
-            delete getApproved[id];
-
-            emit Transfer(from, to, id);
         }
     }
 
@@ -288,20 +272,28 @@ abstract contract SS2ERC721 is ERC721 {
     }
 
     function _burn(uint256 id) internal virtual override {
-        address owner = ownerOf(id);
+        _moveTokenTo(id, BURN_ADDRESS);
+    }
 
-        require(owner != address(0), "NOT_MINTED");
+    function _moveTokenTo(uint256 id, address to) private returns (address owner) {
+        owner = _ownerOfSecondary[id];
 
-        // signed math
-        unchecked {
-            _balanceOfAdjustment[owner]--;
+        if (owner == address(0)) {
+            owner = _ownerOfPrimary(id);
+            require(owner != address(0), "NOT_MINTED");
+
+            _balanceIndicator[owner] |= NOT_PRIMARY_OWNER_FLAG;
+        } else {
+            unchecked {
+                _balanceIndicator[owner]--;
+            }
         }
 
-        _ownerOfSecondary[id] = BURN_ADDRESS;
+        _ownerOfSecondary[id] = to;
 
         delete getApproved[id];
 
-        emit Transfer(owner, BURN_ADDRESS, id);
+        emit Transfer(owner, to, id);
     }
 
     /*//////////////////////////////////////////////////////////////
