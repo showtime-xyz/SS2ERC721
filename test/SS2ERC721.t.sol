@@ -353,6 +353,7 @@ contract ERC721Test is Test {
 
     function test_transferFrom_unowned_reverts() public {
         vm.expectRevert("NOT_MINTED");
+        vm.prank(address(0xFEED));
         token.transferFrom(address(0xFEED), address(0xBEEF), 1337);
     }
 
@@ -360,6 +361,7 @@ contract ERC721Test is Test {
         token.mint(address(0xBEEF));
 
         vm.expectRevert("WRONG_FROM");
+        vm.prank(address(0xFEED));
         token.transferFrom(address(0xFEED), address(0xBEEF), 1);
     }
 
@@ -707,6 +709,7 @@ contract ERC721Test is Test {
     function test_transferFrom_unowned_reverts(address from, address to, uint256 id) public {
         vm.assume(id != 0);
         vm.expectRevert("NOT_MINTED");
+        vm.prank(from);
         token.transferFrom(from, to, id);
     }
 
@@ -717,6 +720,7 @@ contract ERC721Test is Test {
         token.mint(owner);
 
         vm.expectRevert("WRONG_FROM");
+        vm.prank(from);
         token.transferFrom(from, to, 1);
     }
 
