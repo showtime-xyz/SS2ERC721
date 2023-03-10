@@ -108,9 +108,8 @@ abstract contract SS2ERC721 is ERC721 {
         // we use 0 as a sentinel value, meaning that we can't burn by setting the owner to address(0)
         if (owner == address(0)) {
             owner = _ownerOfPrimary(id);
+            require(owner != address(0), "NOT_MINTED");
         }
-
-        require(owner != address(0), "NOT_MINTED");
     }
 
     function balanceOf(address owner) public view virtual override returns (uint256) {
