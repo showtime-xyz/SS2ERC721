@@ -7,21 +7,7 @@ import {stdError} from "forge-std/StdError.sol";
 
 import {SS2ERC721} from "src/SS2ERC721.sol";
 
-contract BasicSS2ERC721 is SS2ERC721 {
-    constructor(string memory name_, string memory symbol_) SS2ERC721(name_, symbol_) {}
-
-    function mint(address ptr) public returns (uint256 numMinted) {
-        numMinted = _mint(ptr);
-    }
-
-    function burn(uint256 tokenId) public {
-        _burn(tokenId);
-    }
-
-    function tokenURI(uint256) public view virtual override returns (string memory) {
-        return "";
-    }
-}
+import {BasicSS2ERC721} from "test/helpers/BasicSS2ERC721.sol";
 
 contract SS2ERC721Specifics is Test {
     address internal constant BURN_ADDRESS = address(0xdEaD);
