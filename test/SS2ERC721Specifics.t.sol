@@ -3,6 +3,7 @@ pragma solidity ^0.8.15;
 
 import {Test} from "forge-std/Test.sol";
 import {SSTORE2} from "solmate/utils/SSTORE2.sol";
+import {stdError} from "forge-std/StdError.sol";
 
 import {SS2ERC721} from "src/SS2ERC721.sol";
 
@@ -23,9 +24,6 @@ contract BasicSS2ERC721 is SS2ERC721 {
 }
 
 contract SS2ERC721Specifics is Test {
-    // https://docs.soliditylang.org/en/latest/control-structures.html#panic-via-assert-and-error-via-require
-    uint256 internal constant ARITHMETIC_UNDERFLOW_OVERFLOW = 0x11;
-
     address internal constant BURN_ADDRESS = address(0xdEaD);
 
     BasicSS2ERC721 token;
@@ -48,7 +46,7 @@ contract SS2ERC721Specifics is Test {
     function test_mint_badPointer_reverts(address ptr) public {
         vm.assume(ptr.code.length == 0);
 
-        vm.expectRevert(abi.encodeWithSignature("Panic(uint256)", ARITHMETIC_UNDERFLOW_OVERFLOW));
+        vm.expectRevert(stdError.arithmeticError);
         token.mint(address(0));
     }
 
@@ -123,6 +121,12 @@ contract SS2ERC721Specifics is Test {
         address alice = makeAddr("alice");
         address bob = address(uint160(alice) + 1);
         address carol = address(uint160(alice) + 2);
+        address dennis = makeAddr("dennis");
+
+        vm.label(bob, "bob");
+        vm.label(carol, "carol");
+
+        // mint to alice, bob, carol
 
         address ptr = SSTORE2.write(abi.encodePacked(alice, bob, carol));
         token.mint(ptr);
@@ -130,10 +134,13 @@ contract SS2ERC721Specifics is Test {
         assertEq(token.balanceOf(alice), 1);
         assertEq(token.balanceOf(bob), 1);
         assertEq(token.balanceOf(carol), 1);
+        assertEq(token.balanceOf(dennis), 0);
 
         assertEq(token.ownerOf(1), alice);
         assertEq(token.ownerOf(2), bob);
         assertEq(token.ownerOf(3), carol);
+
+        // transfers among primary owners
 
         vm.prank(bob);
         token.transferFrom(bob, alice, 2);
@@ -144,26 +151,32 @@ contract SS2ERC721Specifics is Test {
         assertEq(token.balanceOf(alice), 3);
         assertEq(token.balanceOf(bob), 0);
         assertEq(token.balanceOf(carol), 0);
+        assertEq(token.balanceOf(dennis), 0);
 
         assertEq(token.ownerOf(1), alice);
         assertEq(token.ownerOf(2), alice);
         assertEq(token.ownerOf(3), alice);
 
+        // transfers to secondary owners
+
         vm.startPrank(alice);
-        token.transferFrom(alice, bob, 1);
-        token.transferFrom(alice, bob, 2);
-        token.transferFrom(alice, bob, 3);
+        token.transferFrom(alice, dennis, 1);
+        token.transferFrom(alice, dennis, 2);
+        token.transferFrom(alice, dennis, 3);
         vm.stopPrank();
 
         assertEq(token.balanceOf(alice), 0);
-        assertEq(token.balanceOf(bob), 3);
+        assertEq(token.balanceOf(bob), 0);
         assertEq(token.balanceOf(carol), 0);
+        assertEq(token.balanceOf(dennis), 3);
 
-        assertEq(token.ownerOf(1), bob);
-        assertEq(token.ownerOf(2), bob);
-        assertEq(token.ownerOf(3), bob);
+        assertEq(token.ownerOf(1), dennis);
+        assertEq(token.ownerOf(2), dennis);
+        assertEq(token.ownerOf(3), dennis);
 
-        vm.startPrank(bob);
+        // burns
+
+        vm.startPrank(dennis);
         token.burn(1);
         token.burn(2);
         token.burn(3);
@@ -172,6 +185,7 @@ contract SS2ERC721Specifics is Test {
         assertEq(token.balanceOf(alice), 0);
         assertEq(token.balanceOf(bob), 0);
         assertEq(token.balanceOf(carol), 0);
+        assertEq(token.balanceOf(dennis), 0);
         assertEq(token.balanceOf(BURN_ADDRESS), 0);
 
         assertEq(token.ownerOf(1), BURN_ADDRESS);
