@@ -6,8 +6,7 @@ import {Test, console2} from "forge-std/Test.sol";
 import {Owned} from "solmate/auth/Owned.sol";
 import {SSTORE2} from "solmate/utils/SSTORE2.sol";
 
-import {ERC721TokenReceiver} from "src/ERC721TokenReceiver.sol";
-import {SS2ERC721} from "src/SS2ERC721.sol";
+import {SS2ERC721, ERC721TokenReceiver} from "src/SS2ERC721.sol";
 
 contract ERC721Recipient is ERC721TokenReceiver {
     address public operator;
