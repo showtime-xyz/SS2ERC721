@@ -1,0 +1,4 @@
+{
+    "detectors_to_exclude": "assembly,naming-convention",
+    "filter_paths": "(lib/|test/)"
+}

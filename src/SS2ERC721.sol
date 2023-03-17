@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity >=0.8.0;
 
-import {ERC721} from "solmate/tokens/ERC721.sol";
+import {ERC721, ERC721TokenReceiver} from "solmate/tokens/ERC721.sol";
 import {SSTORE2} from "solmate/utils/SSTORE2.sol";
-
-import {ERC721TokenReceiver} from "./ERC721TokenReceiver.sol";
 
 /// @notice SSTORE2-backed version of Solmate's ERC721, optimized for minting in a single batch
 abstract contract SS2ERC721 is ERC721 {
