@@ -708,14 +708,17 @@ contract ERC721Test is Test {
 
     function test_transferFrom_unowned_reverts(address from, address to, uint256 id) public {
         vm.assume(id != 0);
+        vm.assume(to != address(0));
+
         vm.expectRevert("NOT_MINTED");
         vm.prank(from);
         token.transferFrom(from, to, id);
     }
 
     function test_transferFrom_wrongFrom_reverts(address owner, address from, address to) public {
-        vm.assume(owner > address(0));
+        vm.assume(owner != address(0));
         vm.assume(from != owner);
+        vm.assume(to != address(0));
 
         token.mint(owner);
 
