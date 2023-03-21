@@ -206,8 +206,15 @@ abstract contract SS2ERC721 is ERC721 {
             address to;
 
             assembly {
+                // compute the pointer to the recipient address
                 let to_ptr := add(addr_0_ptr, mul(i, ADDRESS_SIZE_BYTES))
+
+                // load and shift the address to the right by 96 bits:
+                //      before: ADDR_ADDR_ADDR_ADDR_ADDR_ADDR_ADDR_ADDR_XXXXXXXXXXXXXXXXXXXXXXXX
+                //      after:  000000000000000000000000_ADDR_ADDR_ADDR_ADDR_ADDR_ADDR_ADDR_ADDR
                 to := shr(ADDRESS_OFFSET_BITS, mload(to_ptr))
+
+                // increment i (no overflow check, because it's a counter increment)
                 i := add(i, 1)
             }
 
