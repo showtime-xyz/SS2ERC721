@@ -32,7 +32,7 @@ contract SS2ERC721Specifics is Test {
     function test_mint_badPointer_reverts(address ptr) public {
         vm.assume(ptr.code.length == 0);
 
-        vm.expectRevert(stdError.arithmeticError);
+        vm.expectRevert("INVALID_ADDRESSES");
         token.mint(address(0));
     }
 

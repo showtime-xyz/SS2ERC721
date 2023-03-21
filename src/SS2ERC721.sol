@@ -9,6 +9,9 @@ abstract contract SS2ERC721 is ERC721 {
     uint256 private constant WORD_SIZE = 32;
     uint256 private constant ADDRESS_SIZE_BYTES = 20;
     uint256 private constant ADDRESS_OFFSET_BITS = 96;
+    uint256 private constant FREE_MEM_PTR = 0x40;
+    uint256 private constant SSTORE2_DATA_OFFSET = 1;
+    uint256 private constant ERROR_STRING_SELECTOR = 0x08c379a0; // Error(string)
 
     // The `Transfer` event signature is given by:
     // `keccak256(bytes("Transfer(address,address,uint256)"))`.
@@ -190,45 +193,87 @@ abstract contract SS2ERC721 is ERC721 {
 
     /// @dev specialized version that performs a batch mint with no safeMint checks
     function _mint(address pointer) internal virtual returns (uint256 numMinted) {
-        require(_ownersPrimaryPointer == address(0), "ALREADY_MINTED");
-
-        bytes memory addresses = SSTORE2.read(pointer);
-        uint256 length = addresses.length;
-        require(length > 0 && length % 20 == 0, "INVALID_ADDRESSES");
-
-        numMinted = length / 20;
-        address prev = address(0);
-
-        uint256 addr_0_ptr;
         assembly {
-            // skip over the length in memory, save the pointer to the first address
-            addr_0_ptr := add(addresses, WORD_SIZE)
-        }
+            function revert_invalid_addresses() {
+                let ptr := mload(FREE_MEM_PTR)
+                mstore(ptr, shl(224, ERROR_STRING_SELECTOR))
+                mstore(add(ptr, 0x04), WORD_SIZE) // String offset
+                mstore(add(ptr, 0x24), 17) // Revert reason length
+                mstore(add(ptr, 0x44), "INVALID_ADDRESSES")
+                revert(ptr, 0x64) // Revert data length is 4 bytes for selector and 3 slots of 0x20 bytes
+            }
 
-        for (uint256 i = 0; i < numMinted;) {
-            address to;
+            function revert_already_minted() {
+                let ptr := mload(FREE_MEM_PTR)
+                mstore(ptr, shl(224, ERROR_STRING_SELECTOR))
+                mstore(add(ptr, 0x04), WORD_SIZE) // String offset
+                mstore(add(ptr, 0x24), 14) // Revert reason length
+                mstore(add(ptr, 0x44), "ALREADY_MINTED")
+                revert(ptr, 0x64) // Revert data length is 4 bytes for selector and 3 slots of 0x20 bytes
+            }
 
-            assembly {
+            function revert_not_sorted() {
+                let ptr := mload(FREE_MEM_PTR)
+                mstore(ptr, shl(224, ERROR_STRING_SELECTOR))
+                mstore(add(ptr, 0x04), WORD_SIZE) // String offset
+                mstore(add(ptr, 0x24), 20) // Revert reason length
+                mstore(add(ptr, 0x44), "ADDRESSES_NOT_SORTED")
+                revert(ptr, 0x64) // Revert data length is 4 bytes for selector and 3 slots of 0x20 bytes
+            }
+
+            let stored_primary_pointer := sload(_ownersPrimaryPointer.slot)
+
+            // if the primary pointer is already set, we can't mint
+            // note: we don't clean the upper bits of the address, we check against the full word
+            if gt(stored_primary_pointer, 0) {
+                revert_already_minted()
+            }
+
+            let clean_pointer := and(pointer, _BITMASK_ADDRESS)
+            let pointer_codesize := extcodesize(clean_pointer)
+            if lt(pointer_codesize, 2) {
+                revert_invalid_addresses()
+            }
+
+            let addresses_length := sub(pointer_codesize, 1)
+            if iszero(addresses_length) {
+                revert_invalid_addresses()
+            }
+
+            if gt(mod(addresses_length, 20), 0) {
+                revert_invalid_addresses()
+            }
+
+            numMinted := div(addresses_length, 20)
+            let prev := 0
+
+            // perform the SSTORE2 read
+            let addresses_data := mload(FREE_MEM_PTR)
+            extcodecopy(
+                clean_pointer,          // address
+                addresses_data,         // memory offset
+                SSTORE2_DATA_OFFSET,    // destination offset
+                addresses_length        // size
+            )
+
+            for { let i := 0 } lt(i, numMinted) { i := add(i, 1) } {
                 // compute the pointer to the recipient address
-                let to_ptr := add(addr_0_ptr, mul(i, ADDRESS_SIZE_BYTES))
+                let to_ptr := add(addresses_data, mul(i, ADDRESS_SIZE_BYTES))
 
                 // load and shift the address to the right by 96 bits:
                 //      before: ADDR_ADDR_ADDR_ADDR_ADDR_ADDR_ADDR_ADDR_XXXXXXXXXXXXXXXXXXXXXXXX
                 //      after:  000000000000000000000000_ADDR_ADDR_ADDR_ADDR_ADDR_ADDR_ADDR_ADDR
                 // this guarantees that the high bits of `to` are clean
-                to := shr(ADDRESS_OFFSET_BITS, mload(to_ptr))
+                let to := shr(ADDRESS_OFFSET_BITS, mload(to_ptr))
 
-                // increment i (no overflow check, because it's a counter increment)
-                i := add(i, 1)
-            }
+                if iszero(gt(to, prev)) {
+                    revert_not_sorted()
+                }
 
-            // enforce that the addresses are sorted with no duplicates, and no zero addresses
-            require(to > prev, "ADDRESSES_NOT_SORTED");
-            prev = to;
+                prev := to
 
-            // borrowed from ERC721A.sol
-            assembly {
-                // Emit the `Transfer` event.
+                // borrowed from ERC721A.sol
+                // Emit the `Transfer` event
                 log4(
                     0, // Start of data (0, since no data).
                     0, // End of data (0, since no data).
@@ -238,11 +283,7 @@ abstract contract SS2ERC721 is ERC721 {
                     i // `tokenId`.
                 )
             }
-        }
 
-        // guarantee that this is a single SSTORE, not an SLOAD followed by an SSTORE
-        assembly {
-            let clean_pointer := and(pointer, _BITMASK_ADDRESS)
             sstore(_ownersPrimaryPointer.slot, clean_pointer)
         }
     }
@@ -252,7 +293,7 @@ abstract contract SS2ERC721 is ERC721 {
     }
 
     /// @dev specialized version that performs a batch mint with a safeMint check at each iteration
-    /// @dev needs to be kept in sync with _mint(address)
+    /// @dev in _safeMint, we try to keep assembly usage at a minimum
     function _safeMint(address pointer, bytes memory data) internal virtual returns (uint256 numMinted) {
         require(_ownersPrimaryPointer == address(0), "ALREADY_MINTED");
 
@@ -263,26 +304,10 @@ abstract contract SS2ERC721 is ERC721 {
         numMinted = length / 20;
         address prev = address(0);
 
-        uint256 addr_0_ptr;
-        assembly {
-            // skip over the length in memory, save the pointer to the first address
-            addr_0_ptr := add(addresses, WORD_SIZE)
-        }
-
         for (uint256 i = 0; i < numMinted;) {
             address to;
-
             assembly {
-                // compute the pointer to the recipient address
-                let to_ptr := add(addr_0_ptr, mul(i, ADDRESS_SIZE_BYTES))
-
-                // load and shift the address to the right by 96 bits:
-                //      before: ADDR_ADDR_ADDR_ADDR_ADDR_ADDR_ADDR_ADDR_XXXXXXXXXXXXXXXXXXXXXXXX
-                //      after:  000000000000000000000000_ADDR_ADDR_ADDR_ADDR_ADDR_ADDR_ADDR_ADDR
-                // this guarantees that the high bits of `to` are clean
-                to := shr(ADDRESS_OFFSET_BITS, mload(to_ptr))
-
-                // increment i (no overflow check, because it's a counter increment)
+                to := shr(96, mload(add(addresses, add(32, mul(i, 20)))))
                 i := add(i, 1)
             }
 
@@ -290,27 +315,12 @@ abstract contract SS2ERC721 is ERC721 {
             require(to > prev, "ADDRESSES_NOT_SORTED");
             prev = to;
 
-            // borrowed from ERC721A.sol
-            assembly {
-                // Emit the `Transfer` event.
-                log4(
-                    0, // Start of data (0, since no data).
-                    0, // End of data (0, since no data).
-                    _TRANSFER_EVENT_SIGNATURE, // Signature.
-                    0, // `from`.
-                    to,
-                    i // `tokenId`.
-                )
-            }
+            emit Transfer(address(0), to, i);
 
             require(_checkOnERC721Received(address(0), to, i, data), "UNSAFE_RECIPIENT");
         }
 
-        // guarantee that this is a single SSTORE, not an SLOAD followed by an SSTORE
-        assembly {
-            let clean_pointer := and(pointer, _BITMASK_ADDRESS)
-            sstore(_ownersPrimaryPointer.slot, clean_pointer)
-        }
+        _ownersPrimaryPointer = pointer;
     }
 
     function _burn(uint256 id) internal virtual override {
