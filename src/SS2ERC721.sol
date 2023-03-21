@@ -6,6 +6,10 @@ import {SSTORE2} from "solmate/utils/SSTORE2.sol";
 
 /// @notice SSTORE2-backed version of Solmate's ERC721, optimized for minting in a single batch
 abstract contract SS2ERC721 is ERC721 {
+    uint256 private constant WORD_SIZE = 32;
+    uint256 private constant ADDRESS_SIZE_BYTES = 20;
+    uint256 private constant ADDRESS_OFFSET_BITS = 96;
+
     // The `Transfer` event signature is given by:
     // `keccak256(bytes("Transfer(address,address,uint256)"))`.
     bytes32 private constant _TRANSFER_EVENT_SIGNATURE =
@@ -38,8 +42,8 @@ abstract contract SS2ERC721 is ERC721 {
     /// @dev 255-bit balance + 1-bit not primary owner flag
     mapping(address => uint256) internal _balanceIndicator;
 
-    uint256 internal constant NOT_PRIMARY_OWNER_FLAG = 1 << 255;
-    uint256 internal constant BALANCE_MASK = 0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
+    uint256 internal constant SKIP_PRIMARY_BALANCE = 1 << 255;
+    uint256 internal constant BALANCE_MASK = type(uint256).max >> 1;
 
     /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
@@ -119,7 +123,7 @@ abstract contract SS2ERC721 is ERC721 {
         uint256 balanceIndicator = _balanceIndicator[owner];
         balance = balanceIndicator & BALANCE_MASK;
 
-        if (balanceIndicator & NOT_PRIMARY_OWNER_FLAG == 0) {
+        if (balanceIndicator & SKIP_PRIMARY_BALANCE == 0) {
             balance += _balanceOfPrimary(owner);
         }
     }
@@ -192,11 +196,18 @@ abstract contract SS2ERC721 is ERC721 {
         numMinted = length / 20;
         address prev = address(0);
 
+        uint256 addr_0_ptr;
+        assembly {
+            // skip over the length in memory, save the pointer to the first address
+            addr_0_ptr := add(addresses, WORD_SIZE)
+        }
+
         for (uint256 i = 0; i < numMinted;) {
             address to;
 
             assembly {
-                to := shr(96, mload(add(addresses, add(32, mul(i, 20)))))
+                let to_ptr := add(addr_0_ptr, mul(i, ADDRESS_SIZE_BYTES))
+                to := shr(ADDRESS_OFFSET_BITS, mload(to_ptr))
                 i := add(i, 1)
             }
 
@@ -281,7 +292,7 @@ abstract contract SS2ERC721 is ERC721 {
             owner = _ownerOfPrimary(id);
             require(owner != address(0), "NOT_MINTED");
 
-            _balanceIndicator[owner] |= NOT_PRIMARY_OWNER_FLAG;
+            _balanceIndicator[owner] |= SKIP_PRIMARY_BALANCE;
         } else {
             unchecked {
                 _balanceIndicator[owner]--;
