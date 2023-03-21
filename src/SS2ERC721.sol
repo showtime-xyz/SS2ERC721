@@ -215,6 +215,7 @@ abstract contract SS2ERC721 is ERC721 {
                 // load and shift the address to the right by 96 bits:
                 //      before: ADDR_ADDR_ADDR_ADDR_ADDR_ADDR_ADDR_ADDR_XXXXXXXXXXXXXXXXXXXXXXXX
                 //      after:  000000000000000000000000_ADDR_ADDR_ADDR_ADDR_ADDR_ADDR_ADDR_ADDR
+                // this guarantees that the high bits of `to` are clean
                 to := shr(ADDRESS_OFFSET_BITS, mload(to_ptr))
 
                 // increment i (no overflow check, because it's a counter increment)
@@ -225,7 +226,7 @@ abstract contract SS2ERC721 is ERC721 {
             require(to > prev, "ADDRESSES_NOT_SORTED");
             prev = to;
 
-            // borrowed from ERC721A.sol, but no need to mask to because it is the output of a shr by 96 bits
+            // borrowed from ERC721A.sol
             assembly {
                 // Emit the `Transfer` event.
                 log4(
@@ -262,11 +263,26 @@ abstract contract SS2ERC721 is ERC721 {
         numMinted = length / 20;
         address prev = address(0);
 
+        uint256 addr_0_ptr;
+        assembly {
+            // skip over the length in memory, save the pointer to the first address
+            addr_0_ptr := add(addresses, WORD_SIZE)
+        }
+
         for (uint256 i = 0; i < numMinted;) {
             address to;
 
             assembly {
-                to := shr(96, mload(add(addresses, add(32, mul(i, 20)))))
+                // compute the pointer to the recipient address
+                let to_ptr := add(addr_0_ptr, mul(i, ADDRESS_SIZE_BYTES))
+
+                // load and shift the address to the right by 96 bits:
+                //      before: ADDR_ADDR_ADDR_ADDR_ADDR_ADDR_ADDR_ADDR_XXXXXXXXXXXXXXXXXXXXXXXX
+                //      after:  000000000000000000000000_ADDR_ADDR_ADDR_ADDR_ADDR_ADDR_ADDR_ADDR
+                // this guarantees that the high bits of `to` are clean
+                to := shr(ADDRESS_OFFSET_BITS, mload(to_ptr))
+
+                // increment i (no overflow check, because it's a counter increment)
                 i := add(i, 1)
             }
 
@@ -274,7 +290,7 @@ abstract contract SS2ERC721 is ERC721 {
             require(to > prev, "ADDRESSES_NOT_SORTED");
             prev = to;
 
-            // borrowed from ERC721A.sol, but no need to mask to because it is the output of a shr by 96 bits
+            // borrowed from ERC721A.sol
             assembly {
                 // Emit the `Transfer` event.
                 log4(
@@ -290,8 +306,11 @@ abstract contract SS2ERC721 is ERC721 {
             require(_checkOnERC721Received(address(0), to, i, data), "UNSAFE_RECIPIENT");
         }
 
-        // we do not explicitly set balanceOf for the primary owners
-        _ownersPrimaryPointer = pointer;
+        // guarantee that this is a single SSTORE, not an SLOAD followed by an SSTORE
+        assembly {
+            let clean_pointer := and(pointer, _BITMASK_ADDRESS)
+            sstore(_ownersPrimaryPointer.slot, clean_pointer)
+        }
     }
 
     function _burn(uint256 id) internal virtual override {
