@@ -15,6 +15,9 @@ abstract contract SS2ERC721 is ERC721 {
     bytes32 private constant _TRANSFER_EVENT_SIGNATURE =
         0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef;
 
+    // The mask of the lower 160 bits for addresses.
+    uint256 private constant _BITMASK_ADDRESS = (1 << 160) - 1;
+
     address internal constant BURN_ADDRESS = address(0xdead);
 
     /*//////////////////////////////////////////////////////////////
@@ -236,8 +239,11 @@ abstract contract SS2ERC721 is ERC721 {
             }
         }
 
-        // we do not explicitly set balanceOf for the primary owners
-        _ownersPrimaryPointer = pointer;
+        // guarantee that this is a single SSTORE, not an SLOAD followed by an SSTORE
+        assembly {
+            let clean_pointer := and(pointer, _BITMASK_ADDRESS)
+            sstore(_ownersPrimaryPointer.slot, clean_pointer)
+        }
     }
 
     function _safeMint(address pointer) internal virtual returns (uint256 numMinted) {
