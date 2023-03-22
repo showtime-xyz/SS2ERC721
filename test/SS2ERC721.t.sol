@@ -86,6 +86,8 @@ contract NonERC721Recipient {}
 /// @notice Test suite for ERC721 based on solmate's
 contract ERC721Test is Test {
     event Transfer(address indexed from, address indexed to, uint256 indexed id);
+    event Approval(address indexed owner, address indexed spender, uint256 indexed id);
+    event ApprovalForAll(address indexed owner, address indexed operator, bool approved);
 
     address internal constant BURN_ADDRESS = address(0xdead);
 
@@ -139,6 +141,9 @@ contract ERC721Test is Test {
     function testBurn() public {
         token.mint(address(0xBEEF), address(0xBFFF));
 
+        vm.expectEmit(true, true, true, true);
+        emit Transfer(address(0xBEEF), address(0xdead), 1);
+
         vm.prank(address(0xBEEF));
         token.burn(1);
 
@@ -148,6 +153,9 @@ contract ERC721Test is Test {
 
     function testApprove() public {
         token.mint(address(this));
+
+        vm.expectEmit(true, true, true, true);
+        emit Approval(address(this), address(0xBEEF), 1);
 
         token.approve(address(0xBEEF), 1);
 
@@ -186,6 +194,9 @@ contract ERC721Test is Test {
     }
 
     function testApproveAll() public {
+        vm.expectEmit(true, true, true, true);
+        emit ApprovalForAll(address(this), address(0xBEEF), true);
+
         token.setApprovalForAll(address(0xBEEF), true);
 
         assertTrue(token.isApprovedForAll(address(this), address(0xBEEF)));
@@ -480,6 +491,12 @@ contract ERC721Test is Test {
         vm.assume(to1 != address(0));
         to2 = bound_min(to2, to1);
 
+        vm.expectEmit(true, true, true, true);
+        emit Transfer(address(0), to1, 1);
+
+        vm.expectEmit(true, true, true, true);
+        emit Transfer(address(0), to2, 2);
+
         token.mint(to1, to2);
         assertEq(token.ownerOf(1), to1);
         assertEq(token.ownerOf(2), to2);
@@ -489,8 +506,10 @@ contract ERC721Test is Test {
 
     function testBurn(address to) public {
         vm.assume(to != address(0));
-
         token.mint(to);
+
+        vm.expectEmit(true, true, true, true);
+        emit Transfer(to, address(0xdead), 1);
 
         vm.prank(to);
         token.burn(1);
@@ -503,6 +522,8 @@ contract ERC721Test is Test {
     function testApprove(address to) public {
         token.mint(address(this));
 
+        vm.expectEmit(true, true, true, true);
+        emit Approval(address(this), to, 1);
         token.approve(to, 1);
 
         assertEq(token.getApproved(1), to);
@@ -524,6 +545,9 @@ contract ERC721Test is Test {
     }
 
     function testApproveAll(address to, bool approved) public {
+        vm.expectEmit(true, true, true, true);
+        emit ApprovalForAll(address(this), to, approved);
+
         token.setApprovalForAll(to, approved);
 
         assertEq(token.isApprovedForAll(address(this), to), approved);
