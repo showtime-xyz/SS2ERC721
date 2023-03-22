@@ -85,6 +85,8 @@ contract NonERC721Recipient {}
 
 /// @notice Test suite for ERC721 based on solmate's
 contract ERC721Test is Test {
+    event Transfer(address indexed from, address indexed to, uint256 indexed id);
+
     address internal constant BURN_ADDRESS = address(0xdead);
 
     MockERC721 token;
@@ -118,6 +120,12 @@ contract ERC721Test is Test {
     }
 
     function testMint() public {
+        vm.expectEmit(true, true, true, true);
+        emit Transfer(address(0), address(0xBEEF), 1);
+
+        vm.expectEmit(true, true, true, true);
+        emit Transfer(address(0), address(0xBFFF), 2);
+
         token.mint(address(0xBEEF), address(0xBFFF));
 
         assertEq(token.balanceOf(address(0xBEEF)), 1);

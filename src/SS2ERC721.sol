@@ -261,7 +261,7 @@ abstract contract SS2ERC721 is ERC721 {
 
             numMinted := div(addresses_length, ADDRESS_SIZE_BYTES)
             let prev := 0
-            for { let i := 0 } lt(i, numMinted) { i := add(i, 1) } {
+            for { let i := 0 } lt(i, numMinted) { } {
                 // compute the pointer to the recipient address
                 let to_ptr := add(addresses_data, mul(i, ADDRESS_SIZE_BYTES))
 
@@ -278,6 +278,10 @@ abstract contract SS2ERC721 is ERC721 {
                 }
 
                 prev := to
+
+                // counter increment, can not overflow
+                // increment before emitting the event, because the first valid tokenId is 1
+                i := add(i, 1)
 
                 // borrowed from ERC721A.sol
                 // Emit the `Transfer` event
