@@ -12,14 +12,16 @@ abstract contract SS2ERC721 is ERC721 {
     uint256 private constant FREE_MEM_PTR = 0x40;
     uint256 private constant SSTORE2_DATA_OFFSET = 1;
     uint256 private constant ERROR_STRING_SELECTOR = 0x08c379a0; // Error(string)
+    uint256 private constant SSTORE2_CREATION_CODE_PREFIX = 0x600B5981380380925939F3; // see SSTORE2.sol
+    uint256 private constant SSTORE2_CREATION_CODE_OFFSET = 12; // prefix length + 1 for a 0 byte
 
     // The `Transfer` event signature is given by:
     // `keccak256(bytes("Transfer(address,address,uint256)"))`.
-    bytes32 private constant _TRANSFER_EVENT_SIGNATURE =
+    bytes32 private constant TRANSFER_EVENT_SIGNATURE =
         0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef;
 
     // The mask of the lower 160 bits for addresses.
-    uint256 private constant _BITMASK_ADDRESS = (1 << 160) - 1;
+    uint256 private constant BITMASK_ADDRESS = (1 << 160) - 1;
 
     /*//////////////////////////////////////////////////////////////
                       ERC721 BALANCE/OWNER STORAGE
@@ -101,6 +103,29 @@ abstract contract SS2ERC721 is ERC721 {
             owner = bytesToAddress(SSTORE2.read(_ownersPrimaryPointer, start, start + 20));
         }
     }
+
+    function _getOwnerSecondary(uint256 id) internal view returns (address owner) {
+        owner = address(uint160(_ownerIndicator[id]));
+    }
+
+    function _setOwnerSecondary(uint256 id, address owner) internal {
+        if (owner == address(0)) {
+            _setBurned(id);
+        } else {
+            // we don't expect this to be called after burning, so no need to carry over the BURNED flag
+            _ownerIndicator[id] = uint160(owner);
+        }
+    }
+
+    function _hasBeenBurned(uint256 id) internal view returns (bool) {
+        return _ownerIndicator[id] & BURNED != 0;
+    }
+
+    /// @dev sets the burned flag *and* sets the owner to address(0)
+    function _setBurned(uint256 id) internal {
+        _ownerIndicator[id] = BURNED;
+    }
+
 
     // binary search of the address based on _ownerOfPrimary
     // performs O(log n) sloads
@@ -212,29 +237,127 @@ abstract contract SS2ERC721 is ERC721 {
                         INTERNAL MINT/BURN LOGIC
     //////////////////////////////////////////////////////////////*/
 
-    function _getOwnerSecondary(uint256 id) internal view returns (address owner) {
-        owner = address(uint160(_ownerIndicator[id]));
-    }
+    /// @dev this function creates a new SSTORE2 pointer, and saves it
+    /// @dev reading addresses from calldata means we can assemble the creation code with a single memory copy
+    function _mint(bytes calldata addresses) internal virtual returns (uint256 numMinted) {
+        assembly {
+            function revert_invalid_addresses() {
+                let ptr := mload(FREE_MEM_PTR)
+                mstore(ptr, shl(224, ERROR_STRING_SELECTOR))
+                mstore(add(ptr, 0x04), WORD_SIZE) // String offset
+                mstore(add(ptr, 0x24), 17) // Revert reason length
+                mstore(add(ptr, 0x44), "INVALID_ADDRESSES")
+                revert(ptr, 0x64) // Revert data length is 4 bytes for selector and 3 slots of 0x20 bytes
+            }
 
-    function _setOwnerSecondary(uint256 id, address owner) internal {
-        if (owner == address(0)) {
-            _setBurned(id);
-        } else {
-            // we don't expect this to be called after burning, so no need to carry over the BURNED flag
-            _ownerIndicator[id] = uint160(owner);
+            function revert_already_minted() {
+                let ptr := mload(FREE_MEM_PTR)
+                mstore(ptr, shl(224, ERROR_STRING_SELECTOR))
+                mstore(add(ptr, 0x04), WORD_SIZE) // String offset
+                mstore(add(ptr, 0x24), 14) // Revert reason length
+                mstore(add(ptr, 0x44), "ALREADY_MINTED")
+                revert(ptr, 0x64) // Revert data length is 4 bytes for selector and 3 slots of 0x20 bytes
+            }
+
+            function revert_not_sorted() {
+                let ptr := mload(FREE_MEM_PTR)
+                mstore(ptr, shl(224, ERROR_STRING_SELECTOR))
+                mstore(add(ptr, 0x04), WORD_SIZE) // String offset
+                mstore(add(ptr, 0x24), 20) // Revert reason length
+                mstore(add(ptr, 0x44), "ADDRESSES_NOT_SORTED")
+                revert(ptr, 0x64) // Revert data length is 4 bytes for selector and 3 slots of 0x20 bytes
+            }
+
+            let stored_primary_pointer := sload(_ownersPrimaryPointer.slot)
+
+            // if the primary pointer is already set, we can't mint
+            // note: we don't clean the upper bits of the address, we check against the full word
+            if gt(stored_primary_pointer, 0) {
+                revert_already_minted()
+            }
+
+            // we expect the SSTORE2 pointer to contain a list of packed addresses
+            // so the length must be a multiple of 20 bytes
+            if gt(mod(addresses.length, ADDRESS_SIZE_BYTES), 0) {
+                revert_invalid_addresses()
+            }
+
+            // the SSTORE2 creation code is SSTORE2_CREATION_CODE_PREFIX + addresses_data
+            let creation_code_len := add(SSTORE2_CREATION_CODE_OFFSET, addresses.length)
+            let creation_code_ptr := mload(FREE_MEM_PTR)
+
+            // copy the creation code prefix
+            // this sets up the memory at creation_code_ptr with the following word:
+            //      600B5981380380925939F3000000000000000000000000000000000000000000
+            // this also has the advantage of storing fresh 0 bytes
+            mstore(
+                creation_code_ptr,
+                shl(
+                    168, // shift the prefix to the left by 21 bytes
+                    SSTORE2_CREATION_CODE_PREFIX
+                )
+            )
+
+            // copy the address data in memory after the creation code prefix
+            // after this call, the memory at creation_code_ptr will look like this:
+            //      600B5981380380925939F300AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+            // note that the 00 bytes between the prefix and the first address is guaranteed to be clean
+            // because of the shl above
+            let addresses_data_ptr := add(creation_code_ptr, SSTORE2_CREATION_CODE_OFFSET)
+            calldatacopy(
+                addresses_data_ptr, // destOffset in memory
+                addresses.offset,   // offset in calldata
+                addresses.length    // length
+            )
+
+            numMinted := div(addresses.length, ADDRESS_SIZE_BYTES)
+            let prev := 0
+            for { let i := 0 } lt(i, numMinted) { } {
+                // compute the pointer to the recipient address
+                let to_ptr := add(addresses_data_ptr, mul(i, ADDRESS_SIZE_BYTES))
+
+                // mload loads a whole 32-byte word, so we get the 20 bytes we want plus 12 bytes we don't:
+                //      AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBBBBB
+                // so we shift right by 12 bytes to get rid of the extra bytes and align the address:
+                //      000000000000000000000000AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+                // this guarantees that the high bits of `to` are clean
+                let to := shr(ADDRESS_OFFSET_BITS, mload(to_ptr))
+
+                // make sure that the addresses are sorted, the binary search in balanceOf relies on it
+                if iszero(gt(to, prev)) {
+                    revert_not_sorted()
+                }
+
+                prev := to
+
+                // counter increment, can not overflow
+                // increment before emitting the event, because the first valid tokenId is 1
+                i := add(i, 1)
+
+                // emit the Transfer event
+                log4(
+                    0,                          // dataOffset
+                    0,                          // dataSize
+                    TRANSFER_EVENT_SIGNATURE,   // topic1 = signature
+                    0,                          // topic2 = from
+                    to,                         // topic3 = to
+                    i                           // topic4 = tokenId
+                )
+            }
+
+            // perform the SSTORE2 write
+            let clean_pointer := create(
+                0,                  // value
+                creation_code_ptr,  // offset
+                creation_code_len   // length
+            )
+
+            sstore(_ownersPrimaryPointer.slot, clean_pointer)
         }
     }
 
-    function _hasBeenBurned(uint256 id) internal view returns (bool) {
-        return _ownerIndicator[id] & BURNED != 0;
-    }
-
-    /// @dev sets the burned flag *and* sets the owner to address(0)
-    function _setBurned(uint256 id) internal {
-        _ownerIndicator[id] = BURNED;
-    }
-
     /// @dev specialized version that performs a batch mint with no safeMint checks
+    /// @dev this function reads from an existing SSTORE2 pointer, and saves it
     function _mint(address pointer) internal virtual returns (uint256 numMinted) {
         assembly {
             function revert_invalid_addresses() {
@@ -273,7 +396,7 @@ abstract contract SS2ERC721 is ERC721 {
             }
 
             // zero-out the upper bits of `pointer`
-            let clean_pointer := and(pointer, _BITMASK_ADDRESS)
+            let clean_pointer := and(pointer, BITMASK_ADDRESS)
 
             let pointer_codesize := extcodesize(clean_pointer)
 
@@ -326,15 +449,14 @@ abstract contract SS2ERC721 is ERC721 {
                 // increment before emitting the event, because the first valid tokenId is 1
                 i := add(i, 1)
 
-                // borrowed from ERC721A.sol
-                // Emit the `Transfer` event
+                // emit the Transfer event
                 log4(
-                    0, // Start of data (0, since no data).
-                    0, // End of data (0, since no data).
-                    _TRANSFER_EVENT_SIGNATURE, // Signature.
-                    0, // `from`.
-                    to,
-                    i // `tokenId`.
+                    0,                          // dataOffset
+                    0,                          // dataSize
+                    TRANSFER_EVENT_SIGNATURE,   // topic1 = signature
+                    0,                          // topic2 = from
+                    to,                         // topic3 = to
+                    i                           // topic4 = tokenId
                 )
             }
 
