@@ -21,8 +21,6 @@ abstract contract SS2ERC721 is ERC721 {
     // The mask of the lower 160 bits for addresses.
     uint256 private constant _BITMASK_ADDRESS = (1 << 160) - 1;
 
-    address internal constant BURN_ADDRESS = address(0xdead);
-
     /*//////////////////////////////////////////////////////////////
                       ERC721 BALANCE/OWNER STORAGE
     //////////////////////////////////////////////////////////////*/
@@ -43,12 +41,28 @@ abstract contract SS2ERC721 is ERC721 {
     /// - the first valid token id is 1
     address internal _ownersPrimaryPointer;
 
-    mapping(uint256 => address) internal _ownerOfSecondary;
+    /// @dev mapping from token id to indicator (owner address plus burned flag packed in the higher bits)
+    mapping(uint256 => uint256) internal _ownerIndicator;
 
     /// @dev 255-bit balance + 1-bit not primary owner flag
+    ///
+    /// - ownerIndicator[id] == 0 == (not_burned, address(0))
+    ///     means that there is no secondary owner for id and we should fall back to the primary owner check
+    ///
+    /// - ownerIndicator[id] == (burned, address(0))
+    ///     means that address(0) *is* the secondary owner, no need to fall back on the primary owner check
+    ///
+    /// - ownerIndicator[id] == (not_burned, owner)
+    ///     means that `owner` is the secondary owner, no need to fall back on the primary owner check
     mapping(address => uint256) internal _balanceIndicator;
 
+    /// @dev a flag for _balanceIndicator
     uint256 internal constant SKIP_PRIMARY_BALANCE = 1 << 255;
+
+    /// @dev a flag for _ownerIndicator
+    /// @dev use a different value then SKIP_PRIMARY_BALANCE to avoid confusion
+    uint256 internal constant BURNED = 1 << 254;
+
     uint256 internal constant BALANCE_MASK = type(uint256).max >> 1;
 
     /*//////////////////////////////////////////////////////////////
@@ -114,7 +128,13 @@ abstract contract SS2ERC721 is ERC721 {
     }
 
     function ownerOf(uint256 id) public view virtual override returns (address owner) {
-        owner = _ownerOfSecondary[id];
+        uint256 ownerIndicator = _ownerIndicator[id];
+        owner = address(uint160(ownerIndicator));
+
+        if (ownerIndicator & BURNED == BURNED) {
+            // normally 0, but return what has been set in the mapping in case inherited contract changes it
+            return owner;
+        }
 
         // we use 0 as a sentinel value, meaning that we can't burn by setting the owner to address(0)
         if (owner == address(0)) {
@@ -154,12 +174,13 @@ abstract contract SS2ERC721 is ERC721 {
             msg.sender == from || isApprovedForAll[from][msg.sender] || msg.sender == getApproved[id], "NOT_AUTHORIZED"
         );
         require(to != address(0), "INVALID_RECIPIENT");
+
         address owner = _moveTokenTo(id, to);
+
         require(from == owner, "WRONG_FROM");
-        if (to != BURN_ADDRESS) {
-            unchecked {
-                _balanceIndicator[to]++;
-            }
+
+        unchecked {
+            _balanceIndicator[to]++;
         }
     }
 
@@ -190,6 +211,28 @@ abstract contract SS2ERC721 is ERC721 {
     /*//////////////////////////////////////////////////////////////
                         INTERNAL MINT/BURN LOGIC
     //////////////////////////////////////////////////////////////*/
+
+    function _getOwnerSecondary(uint256 id) internal view returns (address owner) {
+        owner = address(uint160(_ownerIndicator[id]));
+    }
+
+    function _setOwnerSecondary(uint256 id, address owner) internal {
+        if (owner == address(0)) {
+            _setBurned(id);
+        } else {
+            // we don't expect this to be called after burning, so no need to carry over the BURNED flag
+            _ownerIndicator[id] = uint160(owner);
+        }
+    }
+
+    function _hasBeenBurned(uint256 id) internal view returns (bool) {
+        return _ownerIndicator[id] & BURNED != 0;
+    }
+
+    /// @dev sets the burned flag *and* sets the owner to address(0)
+    function _setBurned(uint256 id) internal {
+        _ownerIndicator[id] = BURNED;
+    }
 
     /// @dev specialized version that performs a batch mint with no safeMint checks
     function _mint(address pointer) internal virtual returns (uint256 numMinted) {
@@ -335,11 +378,11 @@ abstract contract SS2ERC721 is ERC721 {
     }
 
     function _burn(uint256 id) internal virtual override {
-        _moveTokenTo(id, BURN_ADDRESS);
+        _moveTokenTo(id, address(0));
     }
 
     function _moveTokenTo(uint256 id, address to) private returns (address owner) {
-        owner = _ownerOfSecondary[id];
+        owner = _getOwnerSecondary(id);
 
         if (owner == address(0)) {
             owner = _ownerOfPrimary(id);
@@ -352,7 +395,7 @@ abstract contract SS2ERC721 is ERC721 {
             }
         }
 
-        _ownerOfSecondary[id] = to;
+        _setOwnerSecondary(id, to);
 
         delete getApproved[id];
 

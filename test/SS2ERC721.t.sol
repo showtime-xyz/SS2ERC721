@@ -70,12 +70,16 @@ contract MockERC721 is SS2ERC721, Owned {
         _mint(pointer);
     }
 
-    // public wrapper for transferring to the burn address
+    // public authenticated wrapper
     function burn(uint256 id) public {
-        transferFrom(ownerOf(id), address(0xdead), id);
+        address from = ownerOf(id);
+        require(
+            msg.sender == from || isApprovedForAll[from][msg.sender] || msg.sender == getApproved[id], "NOT_AUTHORIZED"
+        );
+        _burn(id);
     }
 
-    //
+    // no auth! contract owner can burn anything
     function burnByContractOwner(uint256 id) public onlyOwner {
         _burn(id);
     }
@@ -88,8 +92,6 @@ contract ERC721Test is Test {
     event Transfer(address indexed from, address indexed to, uint256 indexed id);
     event Approval(address indexed owner, address indexed spender, uint256 indexed id);
     event ApprovalForAll(address indexed owner, address indexed operator, bool approved);
-
-    address internal constant BURN_ADDRESS = address(0xdead);
 
     MockERC721 token;
 
@@ -142,13 +144,13 @@ contract ERC721Test is Test {
         token.mint(address(0xBEEF), address(0xBFFF));
 
         vm.expectEmit(true, true, true, true);
-        emit Transfer(address(0xBEEF), address(0xdead), 1);
+        emit Transfer(address(0xBEEF), address(0), 1);
 
         vm.prank(address(0xBEEF));
         token.burn(1);
 
         assertEq(token.balanceOf(address(0xBEEF)), 0);
-        assertEq(token.ownerOf(1), address(0xdead));
+        assertEq(token.ownerOf(1), address(0));
     }
 
     function testApprove() public {
@@ -172,7 +174,7 @@ contract ERC721Test is Test {
         assertEq(token.balanceOf(address(this)), 0);
         assertEq(token.getApproved(1), address(0));
 
-        assertEq(token.ownerOf(1), address(0xdead));
+        assertEq(token.ownerOf(1), address(0));
     }
 
     function testUnauthorizedBurn() public {
@@ -190,7 +192,7 @@ contract ERC721Test is Test {
         token.burnByContractOwner(1);
 
         assertEq(token.balanceOf(address(0xc0ffee)), 0);
-        assertEq(token.ownerOf(1), address(0xdead));
+        assertEq(token.ownerOf(1), address(0));
     }
 
     function testApproveAll() public {
@@ -509,14 +511,14 @@ contract ERC721Test is Test {
         token.mint(to);
 
         vm.expectEmit(true, true, true, true);
-        emit Transfer(to, address(0xdead), 1);
+        emit Transfer(to, address(0), 1);
 
         vm.prank(to);
         token.burn(1);
 
         assertEq(token.balanceOf(to), 0);
 
-        assertEq(token.ownerOf(1), BURN_ADDRESS);
+        assertEq(token.ownerOf(1), address(0));
     }
 
     function testApprove(address to) public {
@@ -541,7 +543,7 @@ contract ERC721Test is Test {
         assertEq(token.balanceOf(address(this)), 0);
         assertEq(token.getApproved(1), address(0));
 
-        assertEq(token.ownerOf(1), BURN_ADDRESS);
+        assertEq(token.ownerOf(1), address(0));
     }
 
     function testApproveAll(address to, bool approved) public {
@@ -557,7 +559,6 @@ contract ERC721Test is Test {
         vm.assume(from != address(0));
         vm.assume(to != address(0));
         vm.assume(to != from);
-        vm.assume(to != BURN_ADDRESS);
 
         token.mint(from);
 
@@ -575,7 +576,6 @@ contract ERC721Test is Test {
     function testTransferFromSelf(address to) public {
         vm.assume(to != address(0));
         vm.assume(to != address(this));
-        vm.assume(to != BURN_ADDRESS);
 
         token.mint(address(this));
 
@@ -591,7 +591,6 @@ contract ERC721Test is Test {
         vm.assume(from != address(0));
         vm.assume(to != address(0));
         vm.assume(to != from);
-        vm.assume(to != BURN_ADDRESS);
 
         token.mint(from);
 
@@ -610,7 +609,7 @@ contract ERC721Test is Test {
         from = bound_min(from, 20);
         to = bound_min(to, 20);
         vm.assume(to != from);
-        vm.assume(to != BURN_ADDRESS);
+        vm.assume(to != address(0));
 
         token.mint(from);
 
@@ -710,7 +709,6 @@ contract ERC721Test is Test {
 
     function test_burn_double_reverts(address to) public {
         vm.assume(to != address(0));
-        vm.assume(to != address(0xdEaD));
 
         token.mint(to);
 
