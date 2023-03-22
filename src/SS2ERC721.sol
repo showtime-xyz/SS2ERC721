@@ -236,16 +236,9 @@ abstract contract SS2ERC721 is ERC721 {
             }
 
             let addresses_length := sub(pointer_codesize, 1)
-            if iszero(addresses_length) {
+            if gt(mod(addresses_length, ADDRESS_SIZE_BYTES), 0) {
                 revert_invalid_addresses()
             }
-
-            if gt(mod(addresses_length, 20), 0) {
-                revert_invalid_addresses()
-            }
-
-            numMinted := div(addresses_length, 20)
-            let prev := 0
 
             // perform the SSTORE2 read
             let addresses_data := mload(FREE_MEM_PTR)
@@ -256,6 +249,8 @@ abstract contract SS2ERC721 is ERC721 {
                 addresses_length        // size
             )
 
+            numMinted := div(addresses_length, ADDRESS_SIZE_BYTES)
+            let prev := 0
             for { let i := 0 } lt(i, numMinted) { i := add(i, 1) } {
                 // compute the pointer to the recipient address
                 let to_ptr := add(addresses_data, mul(i, ADDRESS_SIZE_BYTES))
