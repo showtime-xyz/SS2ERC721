@@ -229,18 +229,28 @@ abstract contract SS2ERC721 is ERC721 {
                 revert_already_minted()
             }
 
+            // zero-out the upper bits of `pointer`
             let clean_pointer := and(pointer, _BITMASK_ADDRESS)
+
             let pointer_codesize := extcodesize(clean_pointer)
+
+            // if pointer_codesize is 0, then it is not an SSTORE2 pointer
+            // if pointer_codesize is 1, then it may be a valid but empty SSTORE2 pointer
             if lt(pointer_codesize, 2) {
                 revert_invalid_addresses()
             }
 
+            // subtract 1 because SSTORE2 prepends the data with a `00` byte (a STOP opcode)
+            // can not overflow because pointer_codesize is at least 2
             let addresses_length := sub(pointer_codesize, 1)
+
+            // we expect the SSTORE2 pointer to contain a list of packed addresses
+            // so the length must be a multiple of 20 bytes
             if gt(mod(addresses_length, ADDRESS_SIZE_BYTES), 0) {
                 revert_invalid_addresses()
             }
 
-            // perform the SSTORE2 read
+            // perform the SSTORE2 read, store the data in memory at `addresses_data`
             let addresses_data := mload(FREE_MEM_PTR)
             extcodecopy(
                 clean_pointer,          // address
@@ -255,12 +265,14 @@ abstract contract SS2ERC721 is ERC721 {
                 // compute the pointer to the recipient address
                 let to_ptr := add(addresses_data, mul(i, ADDRESS_SIZE_BYTES))
 
-                // load and shift the address to the right by 96 bits:
-                //      before: ADDR_ADDR_ADDR_ADDR_ADDR_ADDR_ADDR_ADDR_XXXXXXXXXXXXXXXXXXXXXXXX
-                //      after:  000000000000000000000000_ADDR_ADDR_ADDR_ADDR_ADDR_ADDR_ADDR_ADDR
+                // mload loads a whole 32-byte word, so we get the 20 bytes we want plus 12 bytes we don't:
+                //      AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBBBBB
+                // so we shift right by 12 bytes to get rid of the extra bytes and align the address:
+                //      000000000000000000000000AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
                 // this guarantees that the high bits of `to` are clean
                 let to := shr(ADDRESS_OFFSET_BITS, mload(to_ptr))
 
+                // make sure that the addresses are sorted, the binary search in balanceOf relies on it
                 if iszero(gt(to, prev)) {
                     revert_not_sorted()
                 }
