@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.15;
 
-import {SSTORE2} from "solmate/utils/SSTORE2.sol";
-
 import {SS2ERC721} from "src/SS2ERC721.sol";
 
 contract BasicSS2ERC721 is SS2ERC721 {
@@ -13,7 +11,7 @@ contract BasicSS2ERC721 is SS2ERC721 {
     }
 
     function mint(bytes calldata recipients) public returns (uint256) {
-        return _mint(SSTORE2.write(recipients));
+        return _mint(recipients);
     }
 
     function burn(uint256 tokenId) public {

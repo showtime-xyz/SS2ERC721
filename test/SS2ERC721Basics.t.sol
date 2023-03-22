@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.15;
 
-import {Test} from "forge-std/Test.sol";
+import {Test, console2} from "forge-std/Test.sol";
 import {SSTORE2} from "solmate/utils/SSTORE2.sol";
 
 import {SS2ERC721} from "src/SS2ERC721.sol";
