@@ -10,8 +10,6 @@ import {SS2ERC721} from "src/SS2ERC721.sol";
 import {BasicSS2ERC721} from "test/helpers/BasicSS2ERC721.sol";
 
 contract SS2ERC721Specifics is Test {
-    address internal constant BURN_ADDRESS = address(0xdEaD);
-
     BasicSS2ERC721 token;
 
     function setUp() public {
@@ -93,14 +91,18 @@ contract SS2ERC721Specifics is Test {
         token.mint(ptr);
     }
 
-    function test_transferFrom_toBurnAddressDoesBurn() public {
+    function test_transferFrom_toDeadAddr() public {
         address ptr = SSTORE2.write(abi.encodePacked(address(this)));
         token.mint(ptr);
 
-        token.transferFrom(address(this), BURN_ADDRESS, 1);
+        address burn_address = address(0xdead);
+
+        token.transferFrom(address(this), burn_address, 1);
         assertEq(token.balanceOf(address(this)), 0);
-        assertEq(token.ownerOf(1), BURN_ADDRESS);
-        assertEq(token.balanceOf(BURN_ADDRESS), 0);
+        assertEq(token.ownerOf(1), burn_address);
+
+        // this is a normal transfer, so the balance is incremented
+        assertEq(token.balanceOf(burn_address), 1);
     }
 
     function test_e2e() public {
@@ -172,10 +174,9 @@ contract SS2ERC721Specifics is Test {
         assertEq(token.balanceOf(bob), 0);
         assertEq(token.balanceOf(carol), 0);
         assertEq(token.balanceOf(dennis), 0);
-        assertEq(token.balanceOf(BURN_ADDRESS), 0);
 
-        assertEq(token.ownerOf(1), BURN_ADDRESS);
-        assertEq(token.ownerOf(2), BURN_ADDRESS);
-        assertEq(token.ownerOf(3), BURN_ADDRESS);
+        assertEq(token.ownerOf(1), address(0));
+        assertEq(token.ownerOf(2), address(0));
+        assertEq(token.ownerOf(3), address(0));
     }
 }
