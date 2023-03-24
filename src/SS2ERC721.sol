@@ -81,7 +81,7 @@ abstract contract SS2ERC721 is ERC721 {
     function bytesToAddress(bytes memory b) internal pure returns (address payable a) {
         require(b.length == 20);
         assembly {
-            a := div(mload(add(b, 32)), exp(256, 12))
+            a := shr(96, mload(add(b, 32)))
         }
     }
 
@@ -99,8 +99,8 @@ abstract contract SS2ERC721 is ERC721 {
         require(id <= _ownersPrimaryLength(), "NOT_MINTED");
 
         unchecked {
-            uint256 start = (id - 1) * 20;
-            owner = bytesToAddress(SSTORE2.read(_ownersPrimaryPointer, start, start + 20));
+            uint256 end = id * 20;
+            owner = bytesToAddress(SSTORE2.read(_ownersPrimaryPointer, end - 20, end));
         }
     }
 
@@ -125,7 +125,6 @@ abstract contract SS2ERC721 is ERC721 {
     function _setBurned(uint256 id) internal {
         _ownerIndicator[id] = BURNED;
     }
-
 
     // binary search of the address based on _ownerOfPrimary
     // performs O(log n) sloads
@@ -205,7 +204,7 @@ abstract contract SS2ERC721 is ERC721 {
         require(from == owner, "WRONG_FROM");
 
         unchecked {
-            _balanceIndicator[to]++;
+            ++_balanceIndicator[to];
         }
     }
 
@@ -272,9 +271,7 @@ abstract contract SS2ERC721 is ERC721 {
 
             // if the primary pointer is already set, we can't mint
             // note: we don't clean the upper bits of the address, we check against the full word
-            if gt(stored_primary_pointer, 0) {
-                revert_already_minted()
-            }
+            if gt(stored_primary_pointer, 0) { revert_already_minted() }
 
             // we expect addresses.length to be > 0
             if eq(addresses.length, 0) {
@@ -283,9 +280,7 @@ abstract contract SS2ERC721 is ERC721 {
 
             // we expect the SSTORE2 pointer to contain a list of packed addresses
             // so the length must be a multiple of 20 bytes
-            if gt(mod(addresses.length, ADDRESS_SIZE_BYTES), 0) {
-                revert_invalid_addresses()
-            }
+            if gt(mod(addresses.length, ADDRESS_SIZE_BYTES), 0) { revert_invalid_addresses() }
 
             // the SSTORE2 creation code is SSTORE2_CREATION_CODE_PREFIX + addresses_data
             let creation_code_len := add(SSTORE2_CREATION_CODE_OFFSET, addresses.length)
@@ -311,13 +306,13 @@ abstract contract SS2ERC721 is ERC721 {
             let addresses_data_ptr := add(creation_code_ptr, SSTORE2_CREATION_CODE_OFFSET)
             calldatacopy(
                 addresses_data_ptr, // destOffset in memory
-                addresses.offset,   // offset in calldata
-                addresses.length    // length
+                addresses.offset, // offset in calldata
+                addresses.length // length
             )
 
             numMinted := div(addresses.length, ADDRESS_SIZE_BYTES)
             let prev := 0
-            for { let i := 0 } lt(i, numMinted) { } {
+            for { let i := 0 } lt(i, numMinted) {} {
                 // compute the pointer to the recipient address
                 let to_ptr := add(addresses_data_ptr, mul(i, ADDRESS_SIZE_BYTES))
 
@@ -329,9 +324,7 @@ abstract contract SS2ERC721 is ERC721 {
                 let to := shr(ADDRESS_OFFSET_BITS, mload(to_ptr))
 
                 // make sure that the addresses are sorted, the binary search in balanceOf relies on it
-                if iszero(gt(to, prev)) {
-                    revert_not_sorted()
-                }
+                if iszero(gt(to, prev)) { revert_not_sorted() }
 
                 prev := to
 
@@ -341,21 +334,22 @@ abstract contract SS2ERC721 is ERC721 {
 
                 // emit the Transfer event
                 log4(
-                    0,                          // dataOffset
-                    0,                          // dataSize
-                    TRANSFER_EVENT_SIGNATURE,   // topic1 = signature
-                    0,                          // topic2 = from
-                    to,                         // topic3 = to
-                    i                           // topic4 = tokenId
+                    0, // dataOffset
+                    0, // dataSize
+                    TRANSFER_EVENT_SIGNATURE, // topic1 = signature
+                    0, // topic2 = from
+                    to, // topic3 = to
+                    i // topic4 = tokenId
                 )
             }
 
             // perform the SSTORE2 write
-            let clean_pointer := create(
-                0,                  // value
-                creation_code_ptr,  // offset
-                creation_code_len   // length
-            )
+            let clean_pointer :=
+                create(
+                    0, // value
+                    creation_code_ptr, // offset
+                    creation_code_len // length
+                )
 
             sstore(_ownersPrimaryPointer.slot, clean_pointer)
         }
@@ -396,9 +390,7 @@ abstract contract SS2ERC721 is ERC721 {
 
             // if the primary pointer is already set, we can't mint
             // note: we don't clean the upper bits of the address, we check against the full word
-            if gt(stored_primary_pointer, 0) {
-                revert_already_minted()
-            }
+            if gt(stored_primary_pointer, 0) { revert_already_minted() }
 
             // zero-out the upper bits of `pointer`
             let clean_pointer := and(pointer, BITMASK_ADDRESS)
@@ -407,9 +399,7 @@ abstract contract SS2ERC721 is ERC721 {
 
             // if pointer_codesize is 0, then it is not an SSTORE2 pointer
             // if pointer_codesize is 1, then it may be a valid but empty SSTORE2 pointer
-            if lt(pointer_codesize, 2) {
-                revert_invalid_addresses()
-            }
+            if lt(pointer_codesize, 2) { revert_invalid_addresses() }
 
             // subtract 1 because SSTORE2 prepends the data with a `00` byte (a STOP opcode)
             // can not overflow because pointer_codesize is at least 2
@@ -417,22 +407,20 @@ abstract contract SS2ERC721 is ERC721 {
 
             // we expect the SSTORE2 pointer to contain a list of packed addresses
             // so the length must be a multiple of 20 bytes
-            if gt(mod(addresses_length, ADDRESS_SIZE_BYTES), 0) {
-                revert_invalid_addresses()
-            }
+            if gt(mod(addresses_length, ADDRESS_SIZE_BYTES), 0) { revert_invalid_addresses() }
 
             // perform the SSTORE2 read, store the data in memory at `addresses_data`
             let addresses_data := mload(FREE_MEM_PTR)
             extcodecopy(
-                clean_pointer,          // address
-                addresses_data,         // memory offset
-                SSTORE2_DATA_OFFSET,    // destination offset
-                addresses_length        // size
+                clean_pointer, // address
+                addresses_data, // memory offset
+                SSTORE2_DATA_OFFSET, // destination offset
+                addresses_length // size
             )
 
             numMinted := div(addresses_length, ADDRESS_SIZE_BYTES)
             let prev := 0
-            for { let i := 0 } lt(i, numMinted) { } {
+            for { let i := 0 } lt(i, numMinted) {} {
                 // compute the pointer to the recipient address
                 let to_ptr := add(addresses_data, mul(i, ADDRESS_SIZE_BYTES))
 
@@ -444,9 +432,7 @@ abstract contract SS2ERC721 is ERC721 {
                 let to := shr(ADDRESS_OFFSET_BITS, mload(to_ptr))
 
                 // make sure that the addresses are sorted, the binary search in balanceOf relies on it
-                if iszero(gt(to, prev)) {
-                    revert_not_sorted()
-                }
+                if iszero(gt(to, prev)) { revert_not_sorted() }
 
                 prev := to
 
@@ -456,12 +442,12 @@ abstract contract SS2ERC721 is ERC721 {
 
                 // emit the Transfer event
                 log4(
-                    0,                          // dataOffset
-                    0,                          // dataSize
-                    TRANSFER_EVENT_SIGNATURE,   // topic1 = signature
-                    0,                          // topic2 = from
-                    to,                         // topic3 = to
-                    i                           // topic4 = tokenId
+                    0, // dataOffset
+                    0, // dataSize
+                    TRANSFER_EVENT_SIGNATURE, // topic1 = signature
+                    0, // topic2 = from
+                    to, // topic3 = to
+                    i // topic4 = tokenId
                 )
             }
 
@@ -518,7 +504,7 @@ abstract contract SS2ERC721 is ERC721 {
             _balanceIndicator[owner] |= SKIP_PRIMARY_BALANCE;
         } else {
             unchecked {
-                _balanceIndicator[owner]--;
+                --_balanceIndicator[owner];
             }
         }
 
