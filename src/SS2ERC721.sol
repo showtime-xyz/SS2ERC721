@@ -99,8 +99,8 @@ abstract contract SS2ERC721 is ERC721 {
         require(id <= _ownersPrimaryLength(), "NOT_MINTED");
 
         unchecked {
-            uint256 start = (id - 1) * 20;
-            owner = bytesToAddress(SSTORE2.read(_ownersPrimaryPointer, start, start + 20));
+            uint256 end = id * 20;
+            owner = bytesToAddress(SSTORE2.read(_ownersPrimaryPointer, end - 20, end));
         }
     }
 
