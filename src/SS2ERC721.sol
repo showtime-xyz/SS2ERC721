@@ -276,6 +276,11 @@ abstract contract SS2ERC721 is ERC721 {
                 revert_already_minted()
             }
 
+            // we expect addresses.length to be > 0
+            if eq(addresses.length, 0) {
+                revert_invalid_addresses()
+            }
+
             // we expect the SSTORE2 pointer to contain a list of packed addresses
             // so the length must be a multiple of 20 bytes
             if gt(mod(addresses.length, ADDRESS_SIZE_BYTES), 0) {

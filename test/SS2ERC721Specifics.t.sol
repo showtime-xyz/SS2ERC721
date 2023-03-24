@@ -34,11 +34,28 @@ contract SS2ERC721Specifics is Test {
         token.mint(address(0));
     }
 
+    function test_mint_badRecipients_reverts() public {
+        vm.expectRevert("INVALID_ADDRESSES");
+        token.mint("beep boop");
+    }
+
+    function test_mint_nullRecipient_reverts() public {
+        // will be caught by the to > prev check since prev is initialized as 0
+        // not the greatest error message for this case, but not worth having a special check
+        vm.expectRevert("ADDRESSES_NOT_SORTED");
+        token.mint(abi.encodePacked(address(0)));
+    }
+
     function test_mint_emptyPointer_reverts() public {
         address ptr = SSTORE2.write("");
 
         vm.expectRevert("INVALID_ADDRESSES");
         token.mint(ptr);
+    }
+
+    function test_mint_emptyRecipients_reverts() public {
+        vm.expectRevert("INVALID_ADDRESSES");
+        token.mint("");
     }
 
     function test_mint_randomData_reverts() public {
