@@ -204,7 +204,7 @@ abstract contract SS2ERC721 is ERC721 {
         require(from == owner, "WRONG_FROM");
 
         unchecked {
-            _balanceIndicator[to]++;
+            ++_balanceIndicator[to];
         }
     }
 
@@ -499,7 +499,7 @@ abstract contract SS2ERC721 is ERC721 {
             _balanceIndicator[owner] |= SKIP_PRIMARY_BALANCE;
         } else {
             unchecked {
-                _balanceIndicator[owner]--;
+                --_balanceIndicator[owner];
             }
         }
 
