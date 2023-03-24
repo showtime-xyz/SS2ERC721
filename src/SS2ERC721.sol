@@ -133,19 +133,20 @@ abstract contract SS2ERC721 is ERC721 {
     function _balanceOfPrimary(address owner) internal view returns (uint256) {
         uint256 low = 1;
         uint256 high = _ownersPrimaryLength();
-        uint256 mid = (low + high) / 2;
+        unchecked {
+            uint256 mid = (low + high) / 2;
 
-        // TODO: unchecked
-        while (low <= high) {
-            address midOwner = _ownerOfPrimary(mid);
-            if (midOwner == owner) {
-                return 1;
-            } else if (midOwner < owner) {
-                low = mid + 1;
-            } else {
-                high = mid - 1;
+            while (low <= high) {
+                address midOwner = _ownerOfPrimary(mid);
+                if (midOwner == owner) {
+                    return 1;
+                } else if (midOwner < owner) {
+                    low = mid + 1;
+                } else {
+                    high = mid - 1;
+                }
+                mid = (low + high) / 2;
             }
-            mid = (low + high) / 2;
         }
 
         return 0;
@@ -174,7 +175,9 @@ abstract contract SS2ERC721 is ERC721 {
         balance = balanceIndicator & BALANCE_MASK;
 
         if (balanceIndicator & SKIP_PRIMARY_BALANCE == 0) {
-            balance += _balanceOfPrimary(owner);
+            unchecked {
+                balance += _balanceOfPrimary(owner);
+            }
         }
     }
 
