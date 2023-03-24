@@ -247,8 +247,8 @@ abstract contract SS2ERC721 is ERC721 {
                 let ptr := mload(FREE_MEM_PTR)
                 mstore(ptr, shl(224, ERROR_STRING_SELECTOR))
                 mstore(add(ptr, 0x04), WORD_SIZE) // String offset
-                // String 0x11 long, stored at 0x35 = 0x43 - (0x1F - 0x11) pointer of "INVALID_ADDRESSES" string.
-                mstore(add(ptr, 0x35), 0x11494E56414C49445F414444524553534553)
+                mstore(add(ptr, 0x24), 17) // Revert reason length
+                mstore(add(ptr, 0x44), "INVALID_ADDRESSES")
                 revert(ptr, 0x64) // Revert data length is 4 bytes for selector and 3 slots of 0x20 bytes
             }
 
@@ -256,8 +256,8 @@ abstract contract SS2ERC721 is ERC721 {
                 let ptr := mload(FREE_MEM_PTR)
                 mstore(ptr, shl(224, ERROR_STRING_SELECTOR))
                 mstore(add(ptr, 0x04), WORD_SIZE) // String offset
-                // String 0x0E long, stored at 0x32 = 0x43 - (0x1F - 0x0E) pointer of "ALREADY_MINTED" string.
-                mstore(add(ptr, 0x32), 0x0E414C52454144595F4D494E544544)
+                mstore(add(ptr, 0x24), 14) // Revert reason length
+                mstore(add(ptr, 0x44), "ALREADY_MINTED")
                 revert(ptr, 0x64) // Revert data length is 4 bytes for selector and 3 slots of 0x20 bytes
             }
 
@@ -265,8 +265,8 @@ abstract contract SS2ERC721 is ERC721 {
                 let ptr := mload(FREE_MEM_PTR)
                 mstore(ptr, shl(224, ERROR_STRING_SELECTOR))
                 mstore(add(ptr, 0x04), WORD_SIZE) // String offset
-                // String 0x14 long, stored at 0x = 0x43 - (0x1F - 0x14) pointer of "ADDRESSES_NOT_SORTED" string.
-                mstore(add(ptr, 0x38), 0x144144445245535345535F4E4F545F534F52544544)
+                mstore(add(ptr, 0x24), 20) // Revert reason length
+                mstore(add(ptr, 0x44), "ADDRESSES_NOT_SORTED")
                 revert(ptr, 0x64) // Revert data length is 4 bytes for selector and 3 slots of 0x20 bytes
             }
 
@@ -361,8 +361,8 @@ abstract contract SS2ERC721 is ERC721 {
                 let ptr := mload(FREE_MEM_PTR)
                 mstore(ptr, shl(224, ERROR_STRING_SELECTOR))
                 mstore(add(ptr, 0x04), WORD_SIZE) // String offset
-                // String 0x11 long, stored at 0x35 = 0x43 - (0x1F - 0x11) pointer of "INVALID_ADDRESSES" string.
-                mstore(add(ptr, 0x35), 0x11494E56414C49445F414444524553534553)
+                mstore(add(ptr, 0x24), 17) // Revert reason length
+                mstore(add(ptr, 0x44), "INVALID_ADDRESSES")
                 revert(ptr, 0x64) // Revert data length is 4 bytes for selector and 3 slots of 0x20 bytes
             }
 
@@ -370,8 +370,8 @@ abstract contract SS2ERC721 is ERC721 {
                 let ptr := mload(FREE_MEM_PTR)
                 mstore(ptr, shl(224, ERROR_STRING_SELECTOR))
                 mstore(add(ptr, 0x04), WORD_SIZE) // String offset
-                // String 0x0E long, stored at 0x32 = 0x43 - (0x1F - 0x0E) pointer of "ALREADY_MINTED" string.
-                mstore(add(ptr, 0x32), 0x0E414C52454144595F4D494E544544)
+                mstore(add(ptr, 0x24), 14) // Revert reason length
+                mstore(add(ptr, 0x44), "ALREADY_MINTED")
                 revert(ptr, 0x64) // Revert data length is 4 bytes for selector and 3 slots of 0x20 bytes
             }
 
@@ -379,8 +379,8 @@ abstract contract SS2ERC721 is ERC721 {
                 let ptr := mload(FREE_MEM_PTR)
                 mstore(ptr, shl(224, ERROR_STRING_SELECTOR))
                 mstore(add(ptr, 0x04), WORD_SIZE) // String offset
-                // String 0x14 long, stored at 0x = 0x43 - (0x1F - 0x14) pointer of "ADDRESSES_NOT_SORTED" string.
-                mstore(add(ptr, 0x38), 0x144144445245535345535F4E4F545F534F52544544)
+                mstore(add(ptr, 0x24), 20) // Revert reason length
+                mstore(add(ptr, 0x44), "ADDRESSES_NOT_SORTED")
                 revert(ptr, 0x64) // Revert data length is 4 bytes for selector and 3 slots of 0x20 bytes
             }
 
