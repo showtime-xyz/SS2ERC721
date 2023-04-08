@@ -6,7 +6,7 @@ import {Test, console2} from "forge-std/Test.sol";
 import {Owned} from "solmate/auth/Owned.sol";
 import {SSTORE2} from "solmate/utils/SSTORE2.sol";
 
-import {SS2ERC721, ERC721TokenReceiver} from "src/SS2ERC721.sol";
+import {SS2ERC721, ERC721TokenReceiver, ERC721} from "src/SS2ERC721.sol";
 
 contract ERC721Recipient is ERC721TokenReceiver {
     address public operator;
@@ -38,6 +38,18 @@ contract RevertingERC721Recipient is ERC721TokenReceiver {
 contract WrongReturnDataERC721Recipient is ERC721TokenReceiver {
     function onERC721Received(address, address, uint256, bytes calldata) public virtual override returns (bytes4) {
         return 0xCAFEBEEF;
+    }
+}
+
+contract ReferenceERC721 is ERC721 {
+    constructor() ERC721("Reference", "REF") {}
+
+    function tokenURI(uint256) public view virtual override returns (string memory) {
+        return "beepboop";
+    }
+
+    function burn(uint256 tokenId) public virtual {
+        _burn(tokenId);
     }
 }
 
@@ -94,6 +106,7 @@ contract ERC721Test is Test {
     event ApprovalForAll(address indexed owner, address indexed operator, bool approved);
 
     MockERC721 token;
+    ReferenceERC721 referenceERC721;
 
     address happyRecipient;
     address nonRecipient;
@@ -102,6 +115,7 @@ contract ERC721Test is Test {
 
     function setUp() public {
         token = new MockERC721("Token", "TKN");
+        referenceERC721 = new ReferenceERC721();
         happyRecipient = address(new ERC721Recipient());
         nonRecipient = address(new NonERC721Recipient());
         revertingRecipient = address(new RevertingERC721Recipient());
@@ -150,7 +164,9 @@ contract ERC721Test is Test {
         token.burn(1);
 
         assertEq(token.balanceOf(address(0xBEEF)), 0);
-        assertEq(token.ownerOf(1), address(0));
+
+        vm.expectRevert("NOT_MINTED");
+        token.ownerOf(1);
     }
 
     function testApprove() public {
@@ -174,7 +190,8 @@ contract ERC721Test is Test {
         assertEq(token.balanceOf(address(this)), 0);
         assertEq(token.getApproved(1), address(0));
 
-        assertEq(token.ownerOf(1), address(0));
+        vm.expectRevert("NOT_MINTED");
+        token.ownerOf(1);
     }
 
     function testUnauthorizedBurn() public {
@@ -192,7 +209,9 @@ contract ERC721Test is Test {
         token.burnByContractOwner(1);
 
         assertEq(token.balanceOf(address(0xc0ffee)), 0);
-        assertEq(token.ownerOf(1), address(0));
+
+        vm.expectRevert("NOT_MINTED");
+        token.ownerOf(1);
     }
 
     function testApproveAll() public {
@@ -347,6 +366,11 @@ contract ERC721Test is Test {
         token.mint(address(0));
     }
 
+    function test_burn_unminted_reverts_reference() public {
+        vm.expectRevert("NOT_MINTED");
+        referenceERC721.burn(1337);
+    }
+
     function test_burn_unminted_reverts() public {
         vm.expectRevert("NOT_MINTED");
         token.burn(1337);
@@ -356,13 +380,8 @@ contract ERC721Test is Test {
         token.mint(address(this));
         token.burn(1);
 
-        vm.expectRevert("NOT_AUTHORIZED");
-        token.burn(1);
-    }
-
-    function test_approve_unminted_reverts() public {
         vm.expectRevert("NOT_MINTED");
-        token.approve(address(0xBEEF), 1337);
+        token.burn(1);
     }
 
     function test_approve_unauthorized_reverts() public {
@@ -518,7 +537,8 @@ contract ERC721Test is Test {
 
         assertEq(token.balanceOf(to), 0);
 
-        assertEq(token.ownerOf(1), address(0));
+        vm.expectRevert("NOT_MINTED");
+        token.ownerOf(1);
     }
 
     function testApprove(address to) public {
@@ -543,7 +563,8 @@ contract ERC721Test is Test {
         assertEq(token.balanceOf(address(this)), 0);
         assertEq(token.getApproved(1), address(0));
 
-        assertEq(token.ownerOf(1), address(0));
+        vm.expectRevert("NOT_MINTED");
+        token.ownerOf(1);
     }
 
     function testApproveAll(address to, bool approved) public {
@@ -715,14 +736,19 @@ contract ERC721Test is Test {
         vm.prank(to);
         token.burn(1);
 
-        vm.expectRevert("NOT_AUTHORIZED");
+        vm.expectRevert("NOT_MINTED");
         vm.prank(to);
         token.burn(1);
     }
 
+    function test_approve_unminted_reverts_reference(uint256 id, address to) public {
+        vm.expectRevert("NOT_AUTHORIZED");
+        referenceERC721.approve(to, id);
+    }
+
     function test_approve_unminted_reverts(uint256 id, address to) public {
-        vm.assume(id != 0);
-        vm.expectRevert("NOT_MINTED");
+        // vm.assume(id != 0);
+        vm.expectRevert("NOT_AUTHORIZED");
         token.approve(to, id);
     }
 

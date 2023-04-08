@@ -95,7 +95,10 @@ abstract contract SS2ERC721 is ERC721 {
     }
 
     function _ownerOfPrimary(uint256 id) internal view returns (address owner) {
-        require(id > 0 && id <= _ownersPrimaryLength(), "NOT_MINTED");
+        // this is an internal method, so return address(0) and let the caller decide if they want to revert
+        if (id == 0 || id > _ownersPrimaryLength()) {
+            return address(0);
+        }
 
         unchecked {
             uint256 end = id * 20;
@@ -150,7 +153,8 @@ abstract contract SS2ERC721 is ERC721 {
         return 0;
     }
 
-    function ownerOf(uint256 id) public view virtual override returns (address owner) {
+    /// @dev for internal use -- does not revert on unminted token ids
+    function __ownerOf(uint256 id) internal view returns (address owner) {
         uint256 ownerIndicator = _ownerIndicator[id];
         owner = address(uint160(ownerIndicator));
 
@@ -162,8 +166,12 @@ abstract contract SS2ERC721 is ERC721 {
         // we use 0 as a sentinel value, meaning that we can't burn by setting the owner to address(0)
         if (owner == address(0)) {
             owner = _ownerOfPrimary(id);
-            require(owner != address(0), "NOT_MINTED");
         }
+    }
+
+    function ownerOf(uint256 id) public view virtual override returns (address owner) {
+        owner = __ownerOf(id);
+        require(owner != address(0), "NOT_MINTED");
     }
 
     function balanceOf(address owner) public view virtual override returns (uint256 balance) {
@@ -183,7 +191,7 @@ abstract contract SS2ERC721 is ERC721 {
 
     function approve(address spender, uint256 id) public virtual override {
         // need to use the ownerOf getter here instead of directly accessing the storage
-        address owner = ownerOf(id);
+        address owner = __ownerOf(id);
 
         require(msg.sender == owner || isApprovedForAll[owner][msg.sender], "NOT_AUTHORIZED");
 

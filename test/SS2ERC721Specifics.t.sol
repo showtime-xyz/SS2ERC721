@@ -187,8 +187,13 @@ contract SS2ERC721Specifics is Test {
         assertEq(token.balanceOf(carol), 0);
         assertEq(token.balanceOf(dennis), 0);
 
-        assertEq(token.ownerOf(1), address(0));
-        assertEq(token.ownerOf(2), address(0));
-        assertEq(token.ownerOf(3), address(0));
+        vm.expectRevert("NOT_MINTED");
+        token.ownerOf(1);
+
+        vm.expectRevert("NOT_MINTED");
+        token.ownerOf(2);
+
+        vm.expectRevert("NOT_MINTED");
+        token.ownerOf(3);
     }
 }

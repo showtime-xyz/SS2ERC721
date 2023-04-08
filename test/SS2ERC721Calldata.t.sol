@@ -138,7 +138,9 @@ contract ERC721CalldataTest is Test {
         token.burn(1);
 
         assertEq(token.balanceOf(address(0xBEEF)), 0);
-        assertEq(token.ownerOf(1), address(0));
+
+        vm.expectRevert("NOT_MINTED");
+        token.ownerOf(1);
     }
 
     function testApprove() public {
@@ -162,7 +164,8 @@ contract ERC721CalldataTest is Test {
         assertEq(token.balanceOf(address(this)), 0);
         assertEq(token.getApproved(1), address(0));
 
-        assertEq(token.ownerOf(1), address(0));
+        vm.expectRevert("NOT_MINTED");
+        token.ownerOf(1);
     }
 
     function testUnauthorizedBurn() public {
@@ -180,7 +183,9 @@ contract ERC721CalldataTest is Test {
         token.burnByContractOwner(1);
 
         assertEq(token.balanceOf(address(0xc0ffee)), 0);
-        assertEq(token.ownerOf(1), address(0));
+
+        vm.expectRevert("NOT_MINTED");
+        token.ownerOf(1);
     }
 
     function testApproveAll() public {
@@ -265,12 +270,12 @@ contract ERC721CalldataTest is Test {
         mint(address(this));
         token.burn(1);
 
-        vm.expectRevert("NOT_AUTHORIZED");
+        vm.expectRevert("NOT_MINTED");
         token.burn(1);
     }
 
     function test_approve_unminted_reverts() public {
-        vm.expectRevert("NOT_MINTED");
+        vm.expectRevert("NOT_AUTHORIZED");
         token.approve(address(0xBEEF), 1337);
     }
 
@@ -397,7 +402,8 @@ contract ERC721CalldataTest is Test {
 
         assertEq(token.balanceOf(to), 0);
 
-        assertEq(token.ownerOf(1), address(0));
+        vm.expectRevert("NOT_MINTED");
+        token.ownerOf(1);
     }
 
     function testApprove(address to) public {
@@ -422,7 +428,9 @@ contract ERC721CalldataTest is Test {
         assertEq(token.balanceOf(address(this)), 0);
         assertEq(token.getApproved(1), address(0));
 
-        assertEq(token.ownerOf(1), address(0));
+
+        vm.expectRevert("NOT_MINTED");
+        token.ownerOf(1);
     }
 
     function testApproveAll(address to, bool approved) public {
@@ -519,14 +527,14 @@ contract ERC721CalldataTest is Test {
         vm.prank(to);
         token.burn(1);
 
-        vm.expectRevert("NOT_AUTHORIZED");
+        vm.expectRevert("NOT_MINTED");
         vm.prank(to);
         token.burn(1);
     }
 
     function test_approve_unminted_reverts(uint256 id, address to) public {
         vm.assume(id != 0);
-        vm.expectRevert("NOT_MINTED");
+        vm.expectRevert("NOT_AUTHORIZED");
         token.approve(to, id);
     }
 
