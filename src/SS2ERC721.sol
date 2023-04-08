@@ -152,6 +152,8 @@ abstract contract SS2ERC721 is ERC721 {
     }
 
     function ownerOf(uint256 id) public view virtual override returns (address owner) {
+        require(id > 0, "ZERO_ID");
+
         uint256 ownerIndicator = _ownerIndicator[id];
         owner = address(uint160(ownerIndicator));
 
