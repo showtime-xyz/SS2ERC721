@@ -375,6 +375,8 @@ contract ERC721CalldataTest is Test {
 
     function testMint(address to1, address to2) public {
         vm.assume(to1 != address(0));
+        vm.assume(to1 != 0xFFfFfFffFFfffFFfFFfFFFFFffFFFffffFfFFFfF);
+
         to2 = bound_min(to2, to1);
 
         vm.expectEmit(true, true, true, true);
