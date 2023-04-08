@@ -478,9 +478,6 @@ contract ERC721Test is Test {
     }
 
     function test_ownerOf_unminted_reverts() public {
-        vm.expectRevert("ZERO_ID");
-        token.ownerOf(0);
-
         vm.expectRevert("NOT_MINTED");
         token.ownerOf(1337);
     }
@@ -808,8 +805,6 @@ contract ERC721Test is Test {
     }
 
     function test_ownerOf_unminted_reverts(uint256 id) public {
-        vm.assume(id != 0);
-
         vm.expectRevert("NOT_MINTED");
         token.ownerOf(id);
     }

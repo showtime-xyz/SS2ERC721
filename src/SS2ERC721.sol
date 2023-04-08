@@ -95,8 +95,7 @@ abstract contract SS2ERC721 is ERC721 {
     }
 
     function _ownerOfPrimary(uint256 id) internal view returns (address owner) {
-        require(id > 0, "ZERO_ID");
-        require(id <= _ownersPrimaryLength(), "NOT_MINTED");
+        require(id > 0 && id <= _ownersPrimaryLength(), "NOT_MINTED");
 
         unchecked {
             uint256 end = id * 20;
@@ -152,8 +151,6 @@ abstract contract SS2ERC721 is ERC721 {
     }
 
     function ownerOf(uint256 id) public view virtual override returns (address owner) {
-        require(id > 0, "ZERO_ID");
-
         uint256 ownerIndicator = _ownerIndicator[id];
         owner = address(uint160(ownerIndicator));
 

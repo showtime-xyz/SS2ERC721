@@ -16,11 +16,6 @@ contract SS2ERC721Specifics is Test {
         token = new BasicSS2ERC721("basic", unicode"✌️");
     }
 
-    function test_ownerOf_idZero_reverts() public {
-        vm.expectRevert("ZERO_ID");
-        token.ownerOf(0);
-    }
-
     function test_mint_nullPointer_reverts() public {
         // there is actually no special treatment for null pointers,
         // it fails with the same error as a bad pointer (i.e. no code at that address)
