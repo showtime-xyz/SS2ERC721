@@ -44,7 +44,6 @@ abstract contract SS2ERC721 is SS2ERC721Base {
     /// - the first valid token id is 1
     address internal _ownersPrimaryPointer;
 
-
     /*//////////////////////////////////////////////////////////////
                               CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
@@ -66,14 +65,20 @@ abstract contract SS2ERC721 is SS2ERC721Base {
 
     function _ownerOfPrimary(uint256 id) internal view override returns (address owner) {
         // this is an internal method, so return address(0) and let the caller decide if they want to revert
-        if (id == 0 || id > _ownersPrimaryLength()) {
+        if (id == 0) {
             return address(0);
         }
 
-        unchecked {
-            uint256 end = id * 20;
-            owner = bytesToAddress(SSTORE2.read(_ownersPrimaryPointer, end - 20, end));
+        address pointer = _ownersPrimaryPointer;
+        if (pointer == address(0)) {
+            return address(0);
         }
+
+        uint256 start = (id - 1) * 20;
+
+        // if we read past the end of the bucket, we will get 0 bytes back
+        // which is great, because we're supposed to return address(0) in that case anyway
+        owner = SSTORE2_readRawAddress(pointer, start);
     }
 
     /*//////////////////////////////////////////////////////////////
