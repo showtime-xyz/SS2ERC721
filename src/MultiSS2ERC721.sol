@@ -77,8 +77,7 @@ abstract contract MultiSS2ERC721 is SS2ERC721Base {
     /// @return owner returns the owner of the given token id
     function _ownerOfPrimary(uint256 id) internal view override returns (address owner) {
         // this is an internal method, so return address(0) and let the caller decide if they want to revert
-        // TODO: avoid _ownersPrimaryLength
-        if (id == 0 || id > _ownersPrimaryLength()) {
+        if (id == 0) {
             return address(0);
         }
 
@@ -88,14 +87,21 @@ abstract contract MultiSS2ERC721 is SS2ERC721Base {
 
             // we must first find which bucket the id is in
             uint256 pointerIndex = (id - 1) / MAX_ADDRESSES_PER_POINTER;
+            if (pointerIndex >= _ownersPrimaryPointers.length) {
+                return address(0);
+            }
+
             address pointer = _ownersPrimaryPointers[pointerIndex];
+            if (pointer == address(0)) {
+                return address(0);
+            }
 
             // then we can calculate the offset into the bucket
             uint256 offset = (zeroBasedId % MAX_ADDRESSES_PER_POINTER) * ADDRESS_SIZE_BYTES;
 
-            // then we can read the address from storage
-            // TODO: check if we get less than 20 bytes returned?
-            owner = bytesToAddress(SSTORE2.read(pointer, offset, offset + ADDRESS_SIZE_BYTES));
+            // if we read past the end of the bucket, we will get 0 bytes back
+            // which is great, because we're supposed to return address(0) in that case anyway
+            owner = SSTORE2_readRawAddress(pointer, offset);
         }
     }
 

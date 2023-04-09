@@ -47,11 +47,21 @@ abstract contract SS2ERC721Base is ERC721 {
     /// or address(0) if the token does not exist
     function _ownerOfPrimary(uint256 id) internal view virtual returns (address owner);
 
-    // borrowed from https://github.com/ensdomains/resolvers/blob/master/contracts/ResolverBase.sol
-    function bytesToAddress(bytes memory b) internal pure returns (address payable a) {
-        require(b.length == 20);
+    /// @dev performs no bounds check, just a raw extcodecopy on the pointer
+    /// @return addr the address at the given pointer (may include 0 bytes if reading past the end of the pointer)
+    function SSTORE2_readRawAddress(address pointer, uint256 start) internal view returns (address addr) {
+        // we're going to read 20 bytes from the pointer in the first scratch space slot
+        uint256 dest_offset = 12;
+
         assembly {
-            a := shr(96, mload(add(b, 32)))
+            start := add(start, 1) // add the SSTORE2 DATA_OFFSET
+
+            // clear it the first scratch space slot
+            mstore(0, 0)
+
+            extcodecopy(pointer, dest_offset, start, 20)
+
+            addr := mload(0)
         }
     }
 
