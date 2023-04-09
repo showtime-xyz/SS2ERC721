@@ -663,6 +663,7 @@ abstract contract ERC721Test is Test, ERC721ImplProvider {
 
     function testSafeTransferFromToERC721RecipientWithData(address from, bytes calldata data) public {
         from = bound_min(from, 20);
+        vm.assume(from != happyRecipient);
 
         ERC721Recipient recipient = ERC721Recipient(happyRecipient);
 
