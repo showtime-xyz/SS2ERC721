@@ -2,6 +2,8 @@
 pragma solidity >=0.8.0;
 
 import {Test, console2} from "forge-std/Test.sol";
+import {IERC721Metadata} from "forge-std/interfaces/IERC721.sol";
+import {IERC165} from "forge-std/interfaces/IERC165.sol";
 
 import {Owned} from "solmate/auth/Owned.sol";
 import {SSTORE2} from "solmate/utils/SSTORE2.sol";
@@ -53,8 +55,22 @@ contract ReferenceERC721 is ERC721 {
     }
 }
 
-abstract contract MockERC721 is SS2ERC721, Owned {
-    constructor(string memory _name, string memory _symbol) SS2ERC721(_name, _symbol) Owned(msg.sender) {}
+abstract contract MockERC721 is SS2ERC721 {
+    constructor(string memory _name, string memory _symbol) SS2ERC721(_name, _symbol) {}
+
+
+    /*//////////////////////////////////////////////////////////////
+                             MUST OVERRIDE
+    //////////////////////////////////////////////////////////////*/
+
+    function safeMint(address to, bytes memory data) public virtual;
+
+    function mint(address to) public virtual;
+
+
+    /*//////////////////////////////////////////////////////////////
+                                HELPERS
+    //////////////////////////////////////////////////////////////*/
 
     function tokenURI(uint256) public pure virtual override returns (string memory) {}
 
@@ -62,15 +78,9 @@ abstract contract MockERC721 is SS2ERC721, Owned {
         _safeMint(pointer, data);
     }
 
-    function safeMint(address addr) public virtual {
-        safeMint(addr, "");
+    function safeMint(address to) public virtual {
+        safeMint(to, "");
     }
-
-    function safeMint(address addr1, bytes memory data) public virtual;
-
-    function mint(address to) public virtual;
-
-    function mint(address addr1, address addr2) public virtual;
 
     // public authenticated wrapper
     function burn(uint256 id) public {
@@ -80,12 +90,8 @@ abstract contract MockERC721 is SS2ERC721, Owned {
         );
         _burn(id);
     }
-
-    // no auth! contract owner can burn anything
-    function burnByContractOwner(uint256 id) public onlyOwner {
-        _burn(id);
-    }
 }
+
 
 contract NonERC721Recipient {}
 
@@ -135,21 +141,14 @@ abstract contract ERC721Test is Test, ERC721ImplProvider {
         vm.expectEmit(true, true, true, true);
         emit Transfer(address(0), address(0xBEEF), 1);
 
-        vm.expectEmit(true, true, true, true);
-        emit Transfer(address(0), address(0xBFFF), 2);
-
-        token.mint(address(0xBEEF), address(0xBFFF));
+        token.mint(address(0xBEEF));
 
         assertEq(token.balanceOf(address(0xBEEF)), 1);
         assertEq(token.ownerOf(1), address(0xBEEF));
     }
 
-    function testBalanceOfBeforeMint() public {
-        assertEq(token.balanceOf(address(0xBEEF)), 0);
-    }
-
     function testBurn() public {
-        token.mint(address(0xBEEF), address(0xBFFF));
+        token.mint(address(0xBEEF));
 
         vm.expectEmit(true, true, true, true);
         emit Transfer(address(0xBEEF), address(0), 1);
@@ -197,17 +196,6 @@ abstract contract ERC721Test is Test, ERC721ImplProvider {
         assertEq(token.balanceOf(address(0xc0ffee)), 1);
     }
 
-    function testBurnByAdmin() public {
-        token.mint(address(0xc0ffee));
-
-        token.burnByContractOwner(1);
-
-        assertEq(token.balanceOf(address(0xc0ffee)), 0);
-
-        vm.expectRevert("NOT_MINTED");
-        token.ownerOf(1);
-    }
-
     function testApproveAll() public {
         vm.expectEmit(true, true, true, true);
         emit ApprovalForAll(address(this), address(0xBEEF), true);
@@ -220,7 +208,7 @@ abstract contract ERC721Test is Test, ERC721ImplProvider {
     function testTransferFrom() public {
         address from = address(0xABCD);
 
-        token.mint(from, address(0xBFFF));
+        token.mint(from);
 
         vm.prank(from);
         token.approve(address(this), 1);
@@ -247,7 +235,7 @@ abstract contract ERC721Test is Test, ERC721ImplProvider {
     function testTransferFromApproveAll() public {
         address from = address(0xABCD);
 
-        token.mint(from, address(0xBFFF));
+        token.mint(from);
 
         vm.prank(from);
         token.setApprovalForAll(address(this), true);
@@ -502,21 +490,20 @@ abstract contract ERC721Test is Test, ERC721ImplProvider {
         assertEq(tkn.symbol(), symbol);
     }
 
-    function testMint(address to1, address to2) public {
-        vm.assume(to1 != address(0));
-        to2 = bound_min(to2, to1);
+    function testMint(address to) public {
+        vm.assume(to != address(0));
 
         vm.expectEmit(true, true, true, true);
-        emit Transfer(address(0), to1, 1);
+        emit Transfer(address(0), to, 1);
 
-        vm.expectEmit(true, true, true, true);
-        emit Transfer(address(0), to2, 2);
+        token.mint(to);
+        assertEq(token.ownerOf(1), to);
+        assertEq(token.balanceOf(to), 1);
+    }
 
-        token.mint(to1, to2);
-        assertEq(token.ownerOf(1), to1);
-        assertEq(token.ownerOf(2), to2);
-        assertEq(token.balanceOf(to1), 1);
-        assertEq(token.balanceOf(to2), 1);
+    function testBalanceOfBeforeMint(address owner) public {
+        vm.assume(owner != address(0));
+        assertEq(token.balanceOf(owner), 0);
     }
 
     function testBurn(address to) public {

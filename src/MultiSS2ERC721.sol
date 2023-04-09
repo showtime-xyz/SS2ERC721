@@ -5,8 +5,8 @@ import {SSTORE2} from "solmate/utils/SSTORE2.sol";
 
 import {SS2ERC721Base, ERC721, ERC721TokenReceiver} from "./common/SS2ERC721Base.sol";
 
-/// @notice SSTORE2-backed version of Solmate's ERC721, optimized for minting in a single batch
-abstract contract SS2ERC721 is SS2ERC721Base {
+/// @notice SSTORE2-backed version of Solmate's ERC721, with support for multiple batches
+abstract contract MultiSS2ERC721 is SS2ERC721Base {
     uint256 private constant WORD_SIZE = 32;
     uint256 private constant ADDRESS_SIZE_BYTES = 20;
     uint256 private constant ADDRESS_OFFSET_BITS = 96;
@@ -15,6 +15,8 @@ abstract contract SS2ERC721 is SS2ERC721Base {
     uint256 private constant ERROR_STRING_SELECTOR = 0x08c379a0; // Error(string)
     uint256 private constant SSTORE2_CREATION_CODE_PREFIX = 0x600B5981380380925939F3; // see SSTORE2.sol
     uint256 private constant SSTORE2_CREATION_CODE_OFFSET = 12; // prefix length + 1 for a 0 byte
+
+    uint256 private constant MAX_ADDRESSES_PER_POINTER = 1228;
 
     // The `Transfer` event signature is given by:
     // `keccak256(bytes("Transfer(address,address,uint256)"))`.
@@ -28,7 +30,7 @@ abstract contract SS2ERC721 is SS2ERC721Base {
                       ERC721 BALANCE/OWNER STORAGE
     //////////////////////////////////////////////////////////////*/
 
-    /// stored as SSTORE2 pointer (https://github.com/transmissions11/solmate/blob/main/src/utils/SSTORE2.sol)
+    /// array of SSTORE2 pointers (https://github.com/transmissions11/solmate/blob/main/src/utils/SSTORE2.sol)
     ///
     /// array of abi.encodePacked(address1, address2, address3...) where address1 is the owner of token 1,
     /// address2 is the owner of token 2, etc.
@@ -42,7 +44,7 @@ abstract contract SS2ERC721 is SS2ERC721Base {
     /// - the list of addresses contains no duplicate
     /// - the list of addresses is sorted
     /// - the first valid token id is 1
-    address internal _ownersPrimaryPointer;
+    address[] internal _ownersPrimaryPointers;
 
     /// @dev mapping from token id to indicator (owner address plus burned flag packed in the higher bits)
     mapping(uint256 => uint256) internal _ownerIndicator;
@@ -87,23 +89,45 @@ abstract contract SS2ERC721 is SS2ERC721Base {
     }
 
     function _ownersPrimaryLength() internal view returns (uint256) {
-        if (_ownersPrimaryPointer == address(0)) {
+        uint256 numPointers = _ownersPrimaryPointers.length;
+        if (numPointers == 0) {
             return 0;
         }
 
-        // checked math will underflow if _ownersPrimaryPointer.code.length == 0
-        return (_ownersPrimaryPointer.code.length - 1) / 20;
+        // numPointers - 1 can not overflow because numPointers > 0
+        // the multiplication can not realistically overflow
+        // lastPointer.code.length - 1 can not underflow because we don't allow empty pointers
+        unchecked {
+            address lastPointer = _ownersPrimaryPointers[numPointers - 1];
+
+            // every pointer except the last one must be full
+            return (numPointers - 1) * MAX_ADDRESSES_PER_POINTER + (lastPointer.code.length - 1) / 20;
+        }
     }
 
+    /// @dev this is a little like a bucket search in a hashmap
+    /// @return owner returns the owner of the given token id
     function _ownerOfPrimary(uint256 id) internal view returns (address owner) {
         // this is an internal method, so return address(0) and let the caller decide if they want to revert
+        // TODO: avoid _ownersPrimaryLength
         if (id == 0 || id > _ownersPrimaryLength()) {
             return address(0);
         }
 
         unchecked {
-            uint256 end = id * 20;
-            owner = bytesToAddress(SSTORE2.read(_ownersPrimaryPointer, end - 20, end));
+            // can not underflow because id > 0
+            uint256 zeroBasedId = id - 1;
+
+            // we must first find which bucket the id is in
+            uint256 pointerIndex = (id - 1) / MAX_ADDRESSES_PER_POINTER;
+            address pointer = _ownersPrimaryPointers[pointerIndex];
+
+            // then we can calculate the offset into the bucket
+            uint256 offset = (zeroBasedId % MAX_ADDRESSES_PER_POINTER) * ADDRESS_SIZE_BYTES;
+
+            // then we can read the address from storage
+            // TODO: check if we get less than 20 bytes returned?
+            owner = bytesToAddress(SSTORE2.read(pointer, offset, offset + ADDRESS_SIZE_BYTES));
         }
     }
 
@@ -247,6 +271,8 @@ abstract contract SS2ERC721 is SS2ERC721Base {
     /// @dev this function creates a new SSTORE2 pointer, and saves it
     /// @dev reading addresses from calldata means we can assemble the creation code with a single memory copy
     function _mint(bytes calldata addresses) internal virtual returns (uint256 numMinted) {
+        address clean_pointer;
+
         assembly {
             function revert_invalid_addresses() {
                 let ptr := mload(FREE_MEM_PTR)
@@ -254,15 +280,6 @@ abstract contract SS2ERC721 is SS2ERC721Base {
                 mstore(add(ptr, 0x04), WORD_SIZE) // String offset
                 mstore(add(ptr, 0x24), 17) // Revert reason length
                 mstore(add(ptr, 0x44), "INVALID_ADDRESSES")
-                revert(ptr, 0x64) // Revert data length is 4 bytes for selector and 3 slots of 0x20 bytes
-            }
-
-            function revert_already_minted() {
-                let ptr := mload(FREE_MEM_PTR)
-                mstore(ptr, shl(224, ERROR_STRING_SELECTOR))
-                mstore(add(ptr, 0x04), WORD_SIZE) // String offset
-                mstore(add(ptr, 0x24), 14) // Revert reason length
-                mstore(add(ptr, 0x44), "ALREADY_MINTED")
                 revert(ptr, 0x64) // Revert data length is 4 bytes for selector and 3 slots of 0x20 bytes
             }
 
@@ -275,16 +292,13 @@ abstract contract SS2ERC721 is SS2ERC721Base {
                 revert(ptr, 0x64) // Revert data length is 4 bytes for selector and 3 slots of 0x20 bytes
             }
 
-            let stored_primary_pointer := sload(_ownersPrimaryPointer.slot)
-
-            // if the primary pointer is already set, we can't mint
-            // note: we don't clean the upper bits of the address, we check against the full word
-            if gt(stored_primary_pointer, 0) { revert_already_minted() }
+            // WARNING: we don't check if there is a previous pointer
+            // WARNING: we don't check that the previous pointer is full
+            // WARNING: we don't check that the addresses are sorted across pointers
+            // WARNING: if these conditions are not met, the contract will be in a BROKEN state
 
             // we expect addresses.length to be > 0
-            if eq(addresses.length, 0) {
-                revert_invalid_addresses()
-            }
+            if eq(addresses.length, 0) { revert_invalid_addresses() }
 
             // we expect the SSTORE2 pointer to contain a list of packed addresses
             // so the length must be a multiple of 20 bytes
@@ -352,20 +366,22 @@ abstract contract SS2ERC721 is SS2ERC721Base {
             }
 
             // perform the SSTORE2 write
-            let clean_pointer :=
+            clean_pointer :=
                 create(
                     0, // value
                     creation_code_ptr, // offset
                     creation_code_len // length
                 )
-
-            sstore(_ownersPrimaryPointer.slot, clean_pointer)
         }
+
+        _ownersPrimaryPointers.push(clean_pointer);
     }
 
     /// @dev specialized version that performs a batch mint with no safeMint checks
     /// @dev this function reads from an existing SSTORE2 pointer, and saves it
     function _mint(address pointer) internal virtual returns (uint256 numMinted) {
+        address clean_pointer;
+
         assembly {
             function revert_invalid_addresses() {
                 let ptr := mload(FREE_MEM_PTR)
@@ -373,15 +389,6 @@ abstract contract SS2ERC721 is SS2ERC721Base {
                 mstore(add(ptr, 0x04), WORD_SIZE) // String offset
                 mstore(add(ptr, 0x24), 17) // Revert reason length
                 mstore(add(ptr, 0x44), "INVALID_ADDRESSES")
-                revert(ptr, 0x64) // Revert data length is 4 bytes for selector and 3 slots of 0x20 bytes
-            }
-
-            function revert_already_minted() {
-                let ptr := mload(FREE_MEM_PTR)
-                mstore(ptr, shl(224, ERROR_STRING_SELECTOR))
-                mstore(add(ptr, 0x04), WORD_SIZE) // String offset
-                mstore(add(ptr, 0x24), 14) // Revert reason length
-                mstore(add(ptr, 0x44), "ALREADY_MINTED")
                 revert(ptr, 0x64) // Revert data length is 4 bytes for selector and 3 slots of 0x20 bytes
             }
 
@@ -394,14 +401,13 @@ abstract contract SS2ERC721 is SS2ERC721Base {
                 revert(ptr, 0x64) // Revert data length is 4 bytes for selector and 3 slots of 0x20 bytes
             }
 
-            let stored_primary_pointer := sload(_ownersPrimaryPointer.slot)
-
-            // if the primary pointer is already set, we can't mint
-            // note: we don't clean the upper bits of the address, we check against the full word
-            if gt(stored_primary_pointer, 0) { revert_already_minted() }
+            // WARNING: we don't check if there is a previous pointer
+            // WARNING: we don't check that the previous pointer is full
+            // WARNING: we don't check that the addresses are sorted across pointers
+            // WARNING: if these conditions are not met, the contract will be in a BROKEN state
 
             // zero-out the upper bits of `pointer`
-            let clean_pointer := and(pointer, BITMASK_ADDRESS)
+            clean_pointer := and(pointer, BITMASK_ADDRESS)
 
             let pointer_codesize := extcodesize(clean_pointer)
 
@@ -458,9 +464,9 @@ abstract contract SS2ERC721 is SS2ERC721Base {
                     i // topic4 = tokenId
                 )
             }
-
-            sstore(_ownersPrimaryPointer.slot, clean_pointer)
         }
+
+        _ownersPrimaryPointers.push(clean_pointer);
     }
 
     function _safeMint(address pointer) internal virtual returns (uint256 numMinted) {
@@ -470,8 +476,6 @@ abstract contract SS2ERC721 is SS2ERC721Base {
     /// @dev specialized version that performs a batch mint with a safeMint check at each iteration
     /// @dev in _safeMint, we try to keep assembly usage at a minimum
     function _safeMint(address pointer, bytes memory data) internal virtual returns (uint256 numMinted) {
-        require(_ownersPrimaryPointer == address(0), "ALREADY_MINTED");
-
         bytes memory addresses = SSTORE2.read(pointer);
         uint256 length = addresses.length;
         require(length > 0 && length % 20 == 0, "INVALID_ADDRESSES");
@@ -495,7 +499,7 @@ abstract contract SS2ERC721 is SS2ERC721Base {
             require(_checkOnERC721Received(address(0), to, i, data), "UNSAFE_RECIPIENT");
         }
 
-        _ownersPrimaryPointer = pointer;
+        _ownersPrimaryPointers.push(pointer);
     }
 
     function _burn(uint256 id) internal virtual override {
