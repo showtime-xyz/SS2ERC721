@@ -58,6 +58,10 @@ abstract contract MockERC721 is SS2ERC721, Owned {
 
     function tokenURI(uint256) public pure virtual override returns (string memory) {}
 
+    function safeMintToPointer(address pointer, bytes memory data) public {
+        _safeMint(pointer, data);
+    }
+
     function safeMint(address addr) public virtual {
         safeMint(addr, "");
     }
@@ -685,16 +689,22 @@ abstract contract ERC721Test is Test, ERC721ImplProvider {
         assertEq(recipient.data(), data);
     }
 
-    function testSafeMintToEOA(address to) public virtual {
+    function testSafeMintToEOA(address to) public {
         to = bound_min(to, 20);
         vm.assume(to.code.length == 0);
 
-        token.safeMint(to);
+        address ptr = SSTORE2.write(abi.encodePacked(to));
+        bool collision = ptr == to;
+
+        // a collision means that `to` is the address of the SSTORE2 ptr
+        // clearly at this point, this is not an EOA so we stop the test
+        vm.assume(!collision);
+
+        token.safeMintToPointer(ptr, "");
 
         assertEq(token.ownerOf(1), to);
         assertEq(token.balanceOf(to), 1);
     }
-
     function testSafeMintToERC721RecipientWithData(bytes calldata data) public {
         ERC721Recipient to = ERC721Recipient(happyRecipient);
 
