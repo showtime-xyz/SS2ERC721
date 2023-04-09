@@ -93,7 +93,7 @@ contract MultiSS2ERC721Calldata is ERC721Test {
 }
 
 /// @notice Test suite for ERC721 based on solmate's
-/// @dev specifically test MultiSS2ERC721._mint(bytes calldata addresses)
+/// @dev specifically test MultiSS2ERC721._mint(address pointer)
 contract MultiSS2ERC721Pointer is ERC721Test {
     function getERC721Impl(string memory name, string memory symbol) public virtual override returns (MockERC721) {
         return MockERC721(address(new MockMultiSS2ERC721PointerMinter(name, symbol)));
