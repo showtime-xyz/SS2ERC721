@@ -17,10 +17,6 @@ contract MockERC721PointerMinter is MockERC721 {
         _safeMint(pointer, data);
     }
 
-    function safeMintToPointer(address pointer, bytes memory data) public {
-        _safeMint(pointer, data);
-    }
-
     function mint(address to) public override {
         address pointer = SSTORE2.write(abi.encodePacked(to));
         _mint(pointer);
@@ -37,22 +33,5 @@ contract MockERC721PointerMinter is MockERC721 {
 contract SS2ERC721Pointer is ERC721Test {
     function getERC721Impl(string memory name, string memory symbol) public virtual override returns (MockERC721) {
         return new MockERC721PointerMinter(name, symbol);
-    }
-
-    function testSafeMintToEOA(address to) public override {
-        to = bound_min(to, 20);
-        vm.assume(to.code.length == 0);
-
-        address ptr = SSTORE2.write(abi.encodePacked(to));
-        bool collision = ptr == to;
-
-        // a collision means that `to` is the address of the SSTORE2 ptr
-        // clearly at this point, this is not an EOA so we stop the test
-        vm.assume(!collision);
-
-        MockERC721PointerMinter(address(token)).safeMintToPointer(ptr, "");
-
-        assertEq(token.ownerOf(1), to);
-        assertEq(token.balanceOf(to), 1);
     }
 }

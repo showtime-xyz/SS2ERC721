@@ -17,6 +17,7 @@ contract MockERC721CalldataMinter is MockERC721 {
     }
 
     function safeMint(address addr1, bytes memory data) public override {
+        // note: there is no safeMint calldata version
         address pointer = SSTORE2.write(abi.encodePacked(addr1));
         _safeMint(pointer, data);
     }
