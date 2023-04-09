@@ -53,34 +53,20 @@ contract ReferenceERC721 is ERC721 {
     }
 }
 
-contract MockERC721 is SS2ERC721, Owned {
+abstract contract MockERC721 is SS2ERC721, Owned {
     constructor(string memory _name, string memory _symbol) SS2ERC721(_name, _symbol) Owned(msg.sender) {}
 
     function tokenURI(uint256) public pure virtual override returns (string memory) {}
 
-    function safeMint(address addr) public returns (bool collision) {
-        address pointer = SSTORE2.write(abi.encodePacked(addr));
-        if (pointer == addr) {
-            return true;
-        }
-
-        _safeMint(pointer);
+    function safeMint(address addr) public virtual {
+        safeMint(addr, "");
     }
 
-    function safeMint(address addr1, bytes memory data) public {
-        address pointer = SSTORE2.write(abi.encodePacked(addr1));
-        _safeMint(pointer, data);
-    }
+    function safeMint(address addr1, bytes memory data) public virtual;
 
-    function mint(address to) public {
-        address pointer = SSTORE2.write(abi.encodePacked(to));
-        _mint(pointer);
-    }
+    function mint(address to) public virtual;
 
-    function mint(address addr1, address addr2) public {
-        address pointer = SSTORE2.write(abi.encodePacked(addr1, addr2));
-        _mint(pointer);
-    }
+    function mint(address addr1, address addr2) public virtual;
 
     // public authenticated wrapper
     function burn(uint256 id) public {
@@ -99,8 +85,12 @@ contract MockERC721 is SS2ERC721, Owned {
 
 contract NonERC721Recipient {}
 
+abstract contract ERC721ImplProvider {
+    function getERC721Impl(string memory name, string memory symbol) public virtual returns (MockERC721);
+}
+
 /// @notice Test suite for ERC721 based on solmate's
-contract ERC721Test is Test {
+abstract contract ERC721Test is Test, ERC721ImplProvider {
     event Transfer(address indexed from, address indexed to, uint256 indexed id);
     event Approval(address indexed owner, address indexed spender, uint256 indexed id);
     event ApprovalForAll(address indexed owner, address indexed operator, bool approved);
@@ -113,8 +103,8 @@ contract ERC721Test is Test {
     address revertingRecipient;
     address wrongReturnDataRecipient;
 
-    function setUp() public {
-        token = new MockERC721("Token", "TKN");
+    function setUp() public virtual {
+        token = getERC721Impl("Token", "TKN");
         referenceERC721 = new ReferenceERC721();
         happyRecipient = address(new ERC721Recipient());
         nonRecipient = address(new NonERC721Recipient());
@@ -502,7 +492,7 @@ contract ERC721Test is Test {
     }
 
     function testMetadata(string memory name, string memory symbol) public {
-        MockERC721 tkn = new MockERC721(name, symbol);
+        MockERC721 tkn = getERC721Impl(name, symbol);
 
         assertEq(tkn.name(), name);
         assertEq(tkn.symbol(), symbol);
@@ -694,15 +684,11 @@ contract ERC721Test is Test {
         assertEq(recipient.data(), data);
     }
 
-    function testSafeMintToEOA(address to) public {
+    function testSafeMintToEOA(address to) public virtual {
         to = bound_min(to, 20);
         vm.assume(to.code.length == 0);
 
-        bool collision = token.safeMint(to);
-
-        // a collision means that `to` is the address of the SSTORE2 ptr
-        // clearly at this point, this is not an EOA so we stop the test
-        vm.assume(!collision);
+        token.safeMint(to);
 
         assertEq(token.ownerOf(1), to);
         assertEq(token.balanceOf(to), 1);
