@@ -15,13 +15,13 @@ library Addresses {
             addresses := mload(0x40)
             let data := add(addresses, 32)
 
-            let addr := startingAddress
+            let a := startingAddress
             for {
                 let i := n
             } gt(i, 0) {
                 i := sub(i, 1)
             } {
-                mstore(add(data, sub(mul(i, 20), 32)), add(addr, sub(i, 1)))
+                mstore(add(data, sub(mul(i, 20), 32)), add(a, sub(i, 1)))
             }
 
             let last := add(data, mul(n, 20))
@@ -35,11 +35,15 @@ library Addresses {
         }
     }
 
-    function incr(address addr) internal pure returns (address) {
-        return address(uint160(addr) + 1);
+    function incr(address a) internal pure returns (address) {
+        return address(uint160(a) + 1);
     }
 
-    function isEOA(address addr) internal view returns (bool) {
-        return addr > address(18) && addr.code.length == 0;
+    function isEOA(address a) internal view returns (bool) {
+        return a > address(18) && a.code.length == 0;
+    }
+
+    function to_addr(uint256 i) internal pure returns (address) {
+        return address(uint160(i));
     }
 }
