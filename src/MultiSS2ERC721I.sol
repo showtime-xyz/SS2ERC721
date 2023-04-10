@@ -18,7 +18,7 @@ abstract contract MultiSS2ERC721I is MultiSS2ERC721, Initializable {
                               INITIALIZER
     //////////////////////////////////////////////////////////////*/
 
-    function Multi__SS2ERC721_init(string memory _name, string memory _symbol) internal onlyInitializing {
+    function __MultiSS2ERC721_init(string memory _name, string memory _symbol) internal onlyInitializing {
         name = _name;
         symbol = _symbol;
     }
