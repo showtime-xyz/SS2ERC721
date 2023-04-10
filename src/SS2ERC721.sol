@@ -100,10 +100,11 @@ abstract contract SS2ERC721 is SS2ERC721Base {
             }
 
             let stored_primary_pointer := sload(_ownersPrimaryPointer.slot)
+            let primary_pointer := and(stored_primary_pointer, BITMASK_ADDRESS)
 
             // if the primary pointer is already set, we can't mint
             // note: we don't clean the upper bits of the address, we check against the full word
-            if gt(stored_primary_pointer, 0) { revert_already_minted() }
+            if gt(primary_pointer, 0) { revert_already_minted() }
 
             // we expect addresses.length to be > 0
             if eq(addresses.length, 0) {
@@ -183,7 +184,10 @@ abstract contract SS2ERC721 is SS2ERC721Base {
                     creation_code_len // length
                 )
 
-            sstore(_ownersPrimaryPointer.slot, clean_pointer)
+            // we need to restore the upper bits that may have been set if data was packed in the same slot
+            // stored_primary_pointer is either 0 (if the slot was clean) or [12-bytes || address(0)]
+            // so we OR it with the clean pointer to restore the upper bits
+            sstore(_ownersPrimaryPointer.slot, or(clean_pointer, stored_primary_pointer))
         }
     }
 
@@ -219,10 +223,11 @@ abstract contract SS2ERC721 is SS2ERC721Base {
             }
 
             let stored_primary_pointer := sload(_ownersPrimaryPointer.slot)
+            let primary_pointer := and(stored_primary_pointer, BITMASK_ADDRESS)
 
             // if the primary pointer is already set, we can't mint
             // note: we don't clean the upper bits of the address, we check against the full word
-            if gt(stored_primary_pointer, 0) { revert_already_minted() }
+            if gt(primary_pointer, 0) { revert_already_minted() }
 
             // zero-out the upper bits of `pointer`
             let clean_pointer := and(pointer, BITMASK_ADDRESS)
@@ -283,7 +288,10 @@ abstract contract SS2ERC721 is SS2ERC721Base {
                 )
             }
 
-            sstore(_ownersPrimaryPointer.slot, clean_pointer)
+            // we need to restore the upper bits that may have been set if data was packed in the same slot
+            // stored_primary_pointer is either 0 (if the slot was clean) or [12-bytes || address(0)]
+            // so we OR it with the clean pointer to restore the upper bits
+            sstore(_ownersPrimaryPointer.slot, or(clean_pointer, stored_primary_pointer))
         }
     }
 
