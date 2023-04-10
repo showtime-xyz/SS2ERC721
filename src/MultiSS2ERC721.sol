@@ -7,24 +7,7 @@ import {SS2ERC721Base, ERC721, ERC721TokenReceiver} from "./common/SS2ERC721Base
 
 /// @notice SSTORE2-backed version of Solmate's ERC721, with support for multiple batches
 abstract contract MultiSS2ERC721 is SS2ERC721Base {
-    uint256 private constant WORD_SIZE = 32;
-    uint256 private constant ADDRESS_SIZE_BYTES = 20;
-    uint256 private constant ADDRESS_OFFSET_BITS = 96;
-    uint256 private constant FREE_MEM_PTR = 0x40;
-    uint256 private constant SSTORE2_DATA_OFFSET = 1;
-    uint256 private constant ERROR_STRING_SELECTOR = 0x08c379a0; // Error(string)
-    uint256 private constant SSTORE2_CREATION_CODE_PREFIX = 0x600B5981380380925939F3; // see SSTORE2.sol
-    uint256 private constant SSTORE2_CREATION_CODE_OFFSET = 12; // prefix length + 1 for a 0 byte
-
     uint256 private constant MAX_ADDRESSES_PER_POINTER = 1228;
-
-    // The `Transfer` event signature is given by:
-    // `keccak256(bytes("Transfer(address,address,uint256)"))`.
-    bytes32 private constant TRANSFER_EVENT_SIGNATURE =
-        0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef;
-
-    // The mask of the lower 160 bits for addresses.
-    uint256 private constant BITMASK_ADDRESS = (1 << 160) - 1;
 
     /*//////////////////////////////////////////////////////////////
                       ERC721 BALANCE/OWNER STORAGE
@@ -32,18 +15,14 @@ abstract contract MultiSS2ERC721 is SS2ERC721Base {
 
     /// array of SSTORE2 pointers (https://github.com/transmissions11/solmate/blob/main/src/utils/SSTORE2.sol)
     ///
-    /// array of abi.encodePacked(address1, address2, address3...) where address1 is the owner of token 1,
-    /// address2 is the owner of token 2, etc.
-    /// This means that:
-    /// - addresses are stored contiguously in storage with no gaps (rather than 1 address per slot)
-    /// - this is optimized for the mint path and using as few storage slots as possible for the primary owners
-    /// - the tradeoff is that it causes extra gas and storage costs in the transfer/burn paths
-    /// - this also causes extra costs in the ownerOf/balanceOf/tokenURI functions, but these are view functions
+    /// We keep the same assumptions as for SS2ERC721 for each pointer (sorted, packed and no duplicates), plus:
+    /// - in order to add a new pointer, the previous pointer must be full if it exists (i.e. it must be MAX_ADDRESSES_PER_POINTER long)
+    /// - the first address in the new pointer must be strictly greater than the last address in the previous pointer
+    /// - no empty pointers
     ///
-    /// Assumptions:
-    /// - the list of addresses contains no duplicate
-    /// - the list of addresses is sorted
-    /// - the first valid token id is 1
+    /// As a result:
+    /// - all pointers must be full except the last one which can be partial
+    /// - addresses are sorted in ascending order _across_ pointers
     address[] internal _ownersPrimaryPointers;
 
     /*//////////////////////////////////////////////////////////////

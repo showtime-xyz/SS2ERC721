@@ -8,6 +8,23 @@ abstract contract SS2ERC721Base is ERC721 {
                                CONSTANTS
     //////////////////////////////////////////////////////////////*/
 
+    uint256 internal constant WORD_SIZE = 32;
+    uint256 internal constant ADDRESS_SIZE_BYTES = 20;
+    uint256 internal constant ADDRESS_OFFSET_BITS = 96;
+    uint256 internal constant FREE_MEM_PTR = 0x40;
+    uint256 internal constant SSTORE2_DATA_OFFSET = 1;
+    uint256 internal constant ERROR_STRING_SELECTOR = 0x08c379a0; // Error(string)
+    uint256 internal constant SSTORE2_CREATION_CODE_PREFIX = 0x600B5981380380925939F3; // see SSTORE2.sol
+    uint256 internal constant SSTORE2_CREATION_CODE_OFFSET = 12; // prefix length + 1 for a 0 byte
+
+    // The `Transfer` event signature is given by:
+    // `keccak256(bytes("Transfer(address,address,uint256)"))`.
+    bytes32 internal constant TRANSFER_EVENT_SIGNATURE =
+        0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef;
+
+    // The mask of the lower 160 bits for addresses.
+    uint256 internal constant BITMASK_ADDRESS = (1 << 160) - 1;
+
     /// @dev a flag for _balanceIndicator
     uint256 internal constant SKIP_PRIMARY_BALANCE = 1 << 255;
 
