@@ -4,7 +4,8 @@ pragma solidity ^0.8.15;
 import "forge-std/Script.sol";
 import {StdAssertions} from "forge-std/StdAssertions.sol";
 
-import {BasicSS2ERC721, make} from "test/SS2ERC721Basics.t.sol";
+import {Addresses} from "test/helpers/Addresses.sol";
+import {BasicSS2ERC721} from "test/SS2ERC721Basics.t.sol";
 
 contract BasicERC721Script is Script, StdAssertions {
     string internal constant ANVIL_MNEMONIC = "test test test test test test test test test test test junk";
@@ -25,20 +26,20 @@ contract BasicERC721Script is Script, StdAssertions {
         BasicSS2ERC721 mintMAX = new BasicSS2ERC721("mintMAX", unicode"✌️");
 
         // gas used 84362
-        assertEq(mint1.mint(make(1)), 1);
+        assertEq(mint1.mint(Addresses.make(1)), 1);
 
         // gas used 142489
-        assertEq(mint10.mint(make(10)), 10);
+        assertEq(mint10.mint(Addresses.make(10)), 10);
 
         // gas used 722765
-        assertEq(mint100.mint(make(100)), 100);
+        assertEq(mint100.mint(Addresses.make(100)), 100);
 
         // gas used 6537658
-        assertEq(mint1000.mint(make(1000)), 1000);
+        assertEq(mint1000.mint(Addresses.make(1000)), 1000);
 
         // gas used 8014192
         // cost per mint 8014192/1228 = 6526
-        assertEq(mintMAX.mint(make(1228)), 1228);
+        assertEq(mintMAX.mint(Addresses.make(1228)), 1228);
 
         vm.stopBroadcast();
     }

@@ -6,28 +6,9 @@ import {SSTORE2} from "solmate/utils/SSTORE2.sol";
 
 import {SS2ERC721} from "src/SS2ERC721.sol";
 
+import {Addresses} from "test/helpers/Addresses.sol";
 import {BasicSS2ERC721} from "test/helpers/BasicSS2ERC721.sol";
 
-/// @dev code from nft-editions/utils/Addresses.sol
-function make(uint256 n) pure returns (bytes memory addresses) {
-    assembly {
-        addresses := mload(0x40)
-        let data := add(addresses, 32)
-
-        // start with the dolphin address
-        let addr := 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE
-        for { let i := n } gt(i, 0) { i := sub(i, 1) } { mstore(add(data, sub(mul(i, 20), 32)), add(addr, i)) }
-
-        let last := add(data, mul(n, 20))
-
-        // store the length
-        mstore(addresses, mul(n, 20))
-
-        // Allocate memory for the length and the bytes,
-        // rounded up to a multiple of 32.
-        mstore(0x40, and(add(last, 31), not(31)))
-    }
-}
 
 contract BasicERC721Test is Test {
     BasicSS2ERC721 nftContract;
@@ -58,11 +39,11 @@ contract BasicERC721Test is Test {
         nftContract_pretransferred.transferFrom(bob, carlotta, 1);
 
         // set up the 1000 token test
-        ptr1000 = SSTORE2.write(make(1000));
+        ptr1000 = SSTORE2.write(Addresses.make(1000));
     }
 
     function mint(uint256 n) private {
-        bytes memory addresses = make(n);
+        bytes memory addresses = Addresses.make(n);
         nftContract.mint(addresses);
     }
 

@@ -15,3 +15,6 @@ docs/
 
 # Ignore gas snapshots -- it doesn't need to be checked in
 .gas-snapshot
+
+# ignore all of broadcast, this is a library
+broadcast/
