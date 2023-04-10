@@ -11,14 +11,16 @@ contract BasicERC721Script is Script, StdAssertions {
     string internal constant ANVIL_MNEMONIC = "test test test test test test test test test test test junk";
 
     function mint(BasicMultiSS2ERC721 token, uint256 count) public returns (uint256 numMinted) {
+        uint256 batchNum = 0;
         while (count > 0) {
-            uint256 batch = count / 1228 > 0 ? 1228 : count % 1228;
+            batchNum++;
 
-            count -= batch;
+            uint256 batchSize = count / 1228 > 0 ? 1228 : count % 1228;
+            count -= batchSize;
 
-            console2.log("batch:", batch);
+            console2.log("sending batch", batchNum, "with size", batchSize);
 
-            numMinted += token.mint(Addresses.make(address(uint160(numMinted) + 1), batch));
+            numMinted += token.mint(Addresses.make(address(uint160(numMinted) + 1), batchSize));
         }
     }
 
