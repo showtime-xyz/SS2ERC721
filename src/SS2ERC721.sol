@@ -57,11 +57,22 @@ abstract contract SS2ERC721 is SS2ERC721Base {
             return address(0);
         }
 
-        uint256 start = (id - 1) * 20;
+        unchecked {
+            // can not underflow because we checked id != 0
+            uint256 zeroBasedId = id - 1;
 
-        // if we read past the end of the bucket, we will get 0 bytes back
-        // which is great, because we're supposed to return address(0) in that case anyway
-        owner = SSTORE2_readRawAddress(pointer, start);
+            // this can overflow!
+            uint256 start = zeroBasedId * 20;
+
+            // check for overflow and exit cleanly if it happens
+            if (start < zeroBasedId) {
+                return address(0);
+            }
+
+            // if we read past the end of the bucket, we will get 0 bytes back
+            // which is great, because we're supposed to return address(0) in that case anyway
+            owner = SSTORE2_readRawAddress(pointer, start);
+        }
     }
 
     /*//////////////////////////////////////////////////////////////

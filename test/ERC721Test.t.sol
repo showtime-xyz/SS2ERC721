@@ -481,6 +481,11 @@ abstract contract ERC721Test is Test, ERC721ImplProvider {
     function test_ownerOf_unminted_reverts() public {
         vm.expectRevert("NOT_MINTED");
         token.ownerOf(1337);
+
+        token.mint(address(this));
+
+        vm.expectRevert("NOT_MINTED");
+        token.ownerOf(1337);
     }
 
     function testMetadata(string memory name, string memory symbol) public {
@@ -815,6 +820,13 @@ abstract contract ERC721Test is Test, ERC721ImplProvider {
     }
 
     function test_ownerOf_unminted_reverts(uint256 id) public {
+        vm.assume(id != 1);
+
+        vm.expectRevert("NOT_MINTED");
+        token.ownerOf(id);
+
+        token.mint(address(this));
+
         vm.expectRevert("NOT_MINTED");
         token.ownerOf(id);
     }
