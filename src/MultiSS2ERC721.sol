@@ -56,20 +56,35 @@ abstract contract MultiSS2ERC721 is SS2ERC721Base {
                          OWNER / BALANCE LOGIC
     //////////////////////////////////////////////////////////////*/
 
+    /// @return numPointers the length of _ownersPrimaryPointers
+    /// @return lastPointer the last pointer in _ownersPrimaryPointers or address(0)
+    /// @return lastPointerLength the length of the last pointer (in number of addresses, not bytes)
+    function _loadCurrentState() internal view returns (uint256 numPointers, address lastPointer, uint256 lastPointerLength) {
+        numPointers = _ownersPrimaryPointers.length;
+        if (numPointers == 0) {
+            return (0, address(0), 0);
+        }
+
+        unchecked {
+            // numPointers - 1 can not overflow because numPointers > 0
+            // lastPointer.code.length - 1 can not underflow because we don't allow empty pointers
+            lastPointer = _ownersPrimaryPointers[numPointers - 1];
+            lastPointerLength = (lastPointer.code.length - 1) / 20;
+        }
+    }
+
+
     function _ownersPrimaryLength() internal view override returns (uint256) {
-        uint256 numPointers = _ownersPrimaryPointers.length;
+        (uint256 numPointers, /* lastPointer */, uint256 lastPointerLength) = _loadCurrentState();
         if (numPointers == 0) {
             return 0;
         }
 
         // numPointers - 1 can not overflow because numPointers > 0
         // the multiplication can not realistically overflow
-        // lastPointer.code.length - 1 can not underflow because we don't allow empty pointers
         unchecked {
-            address lastPointer = _ownersPrimaryPointers[numPointers - 1];
-
             // every pointer except the last one must be full
-            return (numPointers - 1) * MAX_ADDRESSES_PER_POINTER + (lastPointer.code.length - 1) / 20;
+            return (numPointers - 1) * MAX_ADDRESSES_PER_POINTER + lastPointerLength;
         }
     }
 
@@ -110,9 +125,27 @@ abstract contract MultiSS2ERC721 is SS2ERC721Base {
                         INTERNAL MINT/BURN LOGIC
     //////////////////////////////////////////////////////////////*/
 
+
+    // checks that if there is a previous batch, it is full
+    // returns the last owner of the previous batch so that we can check cross-batch sortedness
+    function _mintChecks() internal view returns (uint256 lastTokenId, address prev) {
+        (uint256 numPointers, address lastPointer, uint256 lastPointerLength) = _loadCurrentState();
+        if (numPointers == 0 || lastPointer == address(0)) {
+            return (0, address(0));
+        }
+
+        require(lastPointerLength == MAX_ADDRESSES_PER_POINTER, "INCOMPLETE_BATCH");
+
+        unchecked {
+            lastTokenId = numPointers * MAX_ADDRESSES_PER_POINTER;
+            prev = SSTORE2_readRawAddress(lastPointer, ADDRESS_SIZE_BYTES * (MAX_ADDRESSES_PER_POINTER - 1));
+        }
+    }
+
     /// @dev this function creates a new SSTORE2 pointer, and saves it
     /// @dev reading addresses from calldata means we can assemble the creation code with a single memory copy
     function _mint(bytes calldata addresses) internal virtual returns (uint256 numMinted) {
+        (uint256 lastTokenId, address prev) = _mintChecks();
         address clean_pointer;
 
         assembly {
@@ -133,11 +166,6 @@ abstract contract MultiSS2ERC721 is SS2ERC721Base {
                 mstore(add(ptr, 0x44), "ADDRESSES_NOT_SORTED")
                 revert(ptr, 0x64) // Revert data length is 4 bytes for selector and 3 slots of 0x20 bytes
             }
-
-            // WARNING: we don't check if there is a previous pointer
-            // WARNING: we don't check that the previous pointer is full
-            // WARNING: we don't check that the addresses are sorted across pointers
-            // WARNING: if these conditions are not met, the contract will be in a BROKEN state
 
             // we expect addresses.length to be > 0
             if eq(addresses.length, 0) { revert_invalid_addresses() }
@@ -175,7 +203,6 @@ abstract contract MultiSS2ERC721 is SS2ERC721Base {
             )
 
             numMinted := div(addresses.length, ADDRESS_SIZE_BYTES)
-            let prev := 0
             for { let i := 0 } lt(i, numMinted) {} {
                 // compute the pointer to the recipient address
                 let to_ptr := add(addresses_data_ptr, mul(i, ADDRESS_SIZE_BYTES))
@@ -196,6 +223,8 @@ abstract contract MultiSS2ERC721 is SS2ERC721Base {
                 // increment before emitting the event, because the first valid tokenId is 1
                 i := add(i, 1)
 
+                let tokenId := add(lastTokenId, i)
+
                 // emit the Transfer event
                 log4(
                     0, // dataOffset
@@ -203,7 +232,7 @@ abstract contract MultiSS2ERC721 is SS2ERC721Base {
                     TRANSFER_EVENT_SIGNATURE, // topic1 = signature
                     0, // topic2 = from
                     to, // topic3 = to
-                    i // topic4 = tokenId
+                    tokenId // topic4 = tokenId
                 )
             }
 
@@ -222,6 +251,7 @@ abstract contract MultiSS2ERC721 is SS2ERC721Base {
     /// @dev specialized version that performs a batch mint with no safeMint checks
     /// @dev this function reads from an existing SSTORE2 pointer, and saves it
     function _mint(address pointer) internal virtual returns (uint256 numMinted) {
+        (uint256 lastTokenId, address prev) = _mintChecks();
         address clean_pointer;
 
         assembly {
@@ -275,7 +305,6 @@ abstract contract MultiSS2ERC721 is SS2ERC721Base {
             )
 
             numMinted := div(addresses_length, ADDRESS_SIZE_BYTES)
-            let prev := 0
             for { let i := 0 } lt(i, numMinted) {} {
                 // compute the pointer to the recipient address
                 let to_ptr := add(addresses_data, mul(i, ADDRESS_SIZE_BYTES))
@@ -296,6 +325,8 @@ abstract contract MultiSS2ERC721 is SS2ERC721Base {
                 // increment before emitting the event, because the first valid tokenId is 1
                 i := add(i, 1)
 
+                let tokenId := add(lastTokenId, i)
+
                 // emit the Transfer event
                 log4(
                     0, // dataOffset
@@ -303,7 +334,7 @@ abstract contract MultiSS2ERC721 is SS2ERC721Base {
                     TRANSFER_EVENT_SIGNATURE, // topic1 = signature
                     0, // topic2 = from
                     to, // topic3 = to
-                    i // topic4 = tokenId
+                    tokenId // topic4 = tokenId
                 )
             }
         }
@@ -318,25 +349,27 @@ abstract contract MultiSS2ERC721 is SS2ERC721Base {
     /// @dev specialized version that performs a batch mint with a safeMint check at each iteration
     /// @dev in _safeMint, we try to keep assembly usage at a minimum
     function _safeMint(address pointer, bytes memory data) internal virtual returns (uint256 numMinted) {
+        (uint256 lastTokenId, address prev) = _mintChecks();
+
         bytes memory addresses = SSTORE2.read(pointer);
         uint256 length = addresses.length;
         require(length > 0 && length % 20 == 0, "INVALID_ADDRESSES");
 
         numMinted = length / 20;
-        address prev = address(0);
-
         for (uint256 i = 0; i < numMinted;) {
             address to;
+            uint256 tokenId;
             assembly {
                 to := shr(96, mload(add(addresses, add(32, mul(i, 20)))))
                 i := add(i, 1)
+                tokenId := add(lastTokenId, i)
             }
 
             // enforce that the addresses are sorted with no duplicates, and no zero addresses
             require(to > prev, "ADDRESSES_NOT_SORTED");
             prev = to;
 
-            emit Transfer(address(0), to, i);
+            emit Transfer(address(0), to, tokenId);
 
             require(_checkOnERC721Received(address(0), to, i, data), "UNSAFE_RECIPIENT");
         }
