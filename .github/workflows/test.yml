@@ -46,4 +46,4 @@ jobs:
           forge test -vvv
         id: test
         env:
-          FOUNDRY_PROFILE: superheavy_fuzz
+          FOUNDRY_PROFILE: heavy_fuzz
