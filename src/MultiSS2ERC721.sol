@@ -273,11 +273,6 @@ abstract contract MultiSS2ERC721 is SS2ERC721Base {
                 revert(ptr, 0x64) // Revert data length is 4 bytes for selector and 3 slots of 0x20 bytes
             }
 
-            // WARNING: we don't check if there is a previous pointer
-            // WARNING: we don't check that the previous pointer is full
-            // WARNING: we don't check that the addresses are sorted across pointers
-            // WARNING: if these conditions are not met, the contract will be in a BROKEN state
-
             // zero-out the upper bits of `pointer`
             clean_pointer := and(pointer, BITMASK_ADDRESS)
 

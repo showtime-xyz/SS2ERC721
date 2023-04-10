@@ -9,6 +9,8 @@ import {BasicMultiSS2ERC721} from "test/helpers/BasicMultiSS2ERC721.sol";
 import {Addresses} from "test/helpers/Addresses.sol";
 
 contract MultiSS2ERC721Specifics is Test {
+    using Addresses for uint256;
+
     uint256 BATCH_SIZE = 1228;
 
     event Transfer(address indexed from, address indexed to, uint256 indexed tokenId);
@@ -225,61 +227,92 @@ contract MultiSS2ERC721Specifics is Test {
         token.safeMint(ptr);
     }
 
-    function test_e2e_multiBatch() public {
-        // First full batch, with mint(bytes calldata recipients)
+    function test_mint_unsortedAcrossBatches() public {
+        address startAddr = address(1);
+        address endAddr = (uint160(startAddr) + BATCH_SIZE - 1).to_addr();
+
+        address startPtr = SSTORE2.write(abi.encodePacked(startAddr));
+        address endPtr = SSTORE2.write(abi.encodePacked(endAddr));
+
+        bytes memory recipients = Addresses.make(startAddr, BATCH_SIZE);
+        token.mint(recipients);
+
+        vm.expectRevert("ADDRESSES_NOT_SORTED");
+        token.mint(abi.encodePacked(startAddr));
+
+        vm.expectRevert("ADDRESSES_NOT_SORTED");
+        token.mint(abi.encodePacked(endAddr));
+
+        vm.expectRevert("ADDRESSES_NOT_SORTED");
+        token.mint(startPtr);
+
+        vm.expectRevert("ADDRESSES_NOT_SORTED");
+        token.mint(endPtr);
+
+        vm.expectRevert("ADDRESSES_NOT_SORTED");
+        token.safeMint(startPtr);
+
+        vm.expectRevert("ADDRESSES_NOT_SORTED");
+        token.safeMint(endPtr);
+
+        address nextGoodAddr = (uint256(uint160(endAddr)) + 1).to_addr();
 
         vm.expectEmit(true, true, true, true);
-        emit Transfer(address(0), address(1), 1);
-
-        vm.expectEmit(true, true, true, true);
-        emit Transfer(address(0), addr(BATCH_SIZE), BATCH_SIZE);
-
-        uint256 numMinted = token.mint(Addresses.make(address(1), BATCH_SIZE));
-        assertEq(numMinted, BATCH_SIZE);
-
-        // Second full batch, with mint(address ptr)
-
-        vm.expectEmit(true, true, true, true);
-        emit Transfer(address(0), addr(BATCH_SIZE + 1), BATCH_SIZE + 1);
-
-        vm.expectEmit(true, true, true, true);
-        emit Transfer(address(0), addr(BATCH_SIZE * 2), BATCH_SIZE * 2);
-
-        bytes memory batch2 = Addresses.make(addr(BATCH_SIZE + 1), BATCH_SIZE);
-        numMinted = token.mint(SSTORE2.write(batch2));
-        assertEq(numMinted, BATCH_SIZE);
-
-        // Third batch, with safeMint(address ptr)
-
-        vm.expectEmit(true, true, true, true);
-        emit Transfer(address(0), addr(BATCH_SIZE * 2 + 1), BATCH_SIZE * 2 + 1);
-
-        vm.expectEmit(true, true, true, true);
-        emit Transfer(address(0), addr(BATCH_SIZE * 3), BATCH_SIZE * 3);
-
-        bytes memory batch3 = Addresses.make(addr(BATCH_SIZE * 2 + 1), BATCH_SIZE);
-        numMinted = token.safeMint(SSTORE2.write(batch3));
-        assertEq(numMinted, BATCH_SIZE);
-
-
-        // top if off with an incomplete batch
-
-        token.mint(abi.encodePacked(address(this)));
-
-        // balance checks work
-        assertEq(token.balanceOf(address(1)), 1);
-        assertEq(token.balanceOf(addr(BATCH_SIZE)), 1);
-        assertEq(token.balanceOf(addr(BATCH_SIZE + 1)), 1);
-        assertEq(token.balanceOf(address(this)), 1);
-
-        // ownerOf checks work
-        assertEq(token.ownerOf(1), address(1));
-        assertEq(token.ownerOf(BATCH_SIZE), addr(BATCH_SIZE));
-        assertEq(token.ownerOf(BATCH_SIZE + 1), addr(BATCH_SIZE + 1));
-        assertEq(token.ownerOf(BATCH_SIZE * 3 + 1), address(this));
+        emit Transfer(address(0), nextGoodAddr, BATCH_SIZE + 1);
+        token.mint(abi.encodePacked(nextGoodAddr));
     }
 
-    function addr(uint256 i) internal pure returns (address) {
-        return address(uint160(i));
-    }
+function test_e2e_multiBatch() public {
+    // First full batch, with mint(bytes calldata recipients)
+
+    vm.expectEmit(true, true, true, true);
+    emit Transfer(address(0), address(1), 1);
+
+    vm.expectEmit(true, true, true, true);
+    emit Transfer(address(0), (BATCH_SIZE).to_addr(), BATCH_SIZE);
+
+    uint256 numMinted = token.mint(Addresses.make(address(1), BATCH_SIZE));
+    assertEq(numMinted, BATCH_SIZE);
+
+    // Second full batch, with mint(address ptr)
+
+    vm.expectEmit(true, true, true, true);
+    emit Transfer(address(0), (BATCH_SIZE + 1).to_addr(), BATCH_SIZE + 1);
+
+    vm.expectEmit(true, true, true, true);
+    emit Transfer(address(0), (BATCH_SIZE * 2).to_addr(), BATCH_SIZE * 2);
+
+    bytes memory batch2 = Addresses.make((BATCH_SIZE + 1).to_addr(), BATCH_SIZE);
+    numMinted = token.mint(SSTORE2.write(batch2));
+    assertEq(numMinted, BATCH_SIZE);
+
+    // Third batch, with safeMint(address ptr)
+
+    vm.expectEmit(true, true, true, true);
+    emit Transfer(address(0), (BATCH_SIZE * 2 + 1).to_addr(), BATCH_SIZE * 2 + 1);
+
+    vm.expectEmit(true, true, true, true);
+    emit Transfer(address(0), (BATCH_SIZE * 3).to_addr(), BATCH_SIZE * 3);
+
+    bytes memory batch3 = Addresses.make((BATCH_SIZE * 2 + 1).to_addr(), BATCH_SIZE);
+    numMinted = token.safeMint(SSTORE2.write(batch3));
+    assertEq(numMinted, BATCH_SIZE);
+
+    // top if off with an incomplete batch
+
+    token.mint(abi.encodePacked(address(this)));
+
+    // balance checks work
+    assertEq(token.balanceOf(address(1)), 1);
+    assertEq(token.balanceOf((BATCH_SIZE).to_addr()), 1);
+    assertEq(token.balanceOf((BATCH_SIZE + 1).to_addr()), 1);
+    assertEq(token.balanceOf(address(this)), 1);
+
+    // ownerOf checks work
+    assertEq(token.ownerOf(1), address(1));
+    assertEq(token.ownerOf(BATCH_SIZE), (BATCH_SIZE).to_addr());
+    assertEq(token.ownerOf(BATCH_SIZE + 1), (BATCH_SIZE + 1).to_addr());
+    assertEq(token.ownerOf(BATCH_SIZE * 3 + 1), address(this));
+}
+
 }
